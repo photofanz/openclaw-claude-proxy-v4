@@ -20,8 +20,8 @@ Agents / OpenClaw               Proxy (localhost:3456)            Claude Max
 
 | 功能 | 說明 |
 |------|------|
-| Anthropic Messages API | `/v1/messages` — Agent SDK 後端，支援 tool_use |
-| OpenAI-compatible API | `/v1/chat/completions` — CLI 後端，純文字，向下相容 |
+| Anthropic Messages API | `/v1/messages` — Agent SDK 後端，支援回傳 tool_use block |
+| OpenAI-compatible API | `/v1/chat/completions` — CLI 後端，向下相容（不支援 tool_calls） |
 | 多模型路由 | Opus 4.6 / Sonnet 4.6 / Haiku 4.5，透過 `model` 參數切換 |
 | Plugin 系統 | pre/post 處理 hooks，放 `.js` 到 `plugins/` 即生效 |
 | 用量統計 | `GET /stats` — 請求數、token 估算、平均回應時間 |
@@ -142,7 +142,8 @@ curl -X POST http://localhost:3456/v1/messages \
 
 ### POST `/v1/chat/completions` — OpenAI-compatible（Legacy）
 
-使用 Claude CLI (`claude --print`) 後端，純文字回應。支援 streaming（simulated SSE）。
+使用 Claude CLI (`claude --print`) 後端，向下相容舊客戶端。支援 streaming（simulated SSE）。
+不支援 `tools` / `tool_calls`，如需 tool use 請改用 `/v1/messages`。
 
 ```bash
 curl -X POST http://localhost:3456/v1/chat/completions \
@@ -324,7 +325,7 @@ module.exports = {
 │  │  ┌─────────────────┬──────────────────────┐           │     │
 │  │  │ /v1/messages    │ /v1/chat/completions │           │     │
 │  │  │ Agent SDK       │ CLI (claude --print) │           │     │
-│  │  │ 支援 tool_use   │ 純文字，支援 stream  │           │     │
+│  │  │ 支援 tool_use   │ 無 tool_calls，有 stream │           │     │
 │  │  └────────┬────────┴──────────┬───────────┘           │     │
 │  │           │                   │                        │     │
 │  │  Queue: MAX_CONCURRENT=2, rate limit, auto-retry       │     │

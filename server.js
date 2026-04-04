@@ -277,18 +277,17 @@ app.post('/v1/messages', auth, async (req, res) => {
 
     const durationMs = Date.now() - startTime;
 
-    // Build content: prefer result text, fall back to last assistant's text blocks
+    // Build content: preserve all content blocks (text + tool_use) from assistant
     let content;
-    if (resultMessage && resultMessage.result) {
+    if (lastAssistantMessage && Array.isArray(lastAssistantMessage.content) && lastAssistantMessage.content.length > 0) {
+      content = lastAssistantMessage.content;
+    } else if (resultMessage && resultMessage.result) {
       content = [{ type: 'text', text: resultMessage.result }];
-    } else if (lastAssistantMessage) {
-      const textBlocks = (lastAssistantMessage.content || []).filter(b => b.type === 'text');
-      content = textBlocks.length > 0 ? textBlocks : [{ type: 'text', text: '' }];
     } else {
       content = [{ type: 'text', text: '' }];
     }
 
-    const hasToolUse = false; // SDK handles tools internally, final response is always text
+    const hasToolUse = content.some(b => b.type === 'tool_use');
 
     // Build Anthropic Messages API response
     const response = {
@@ -506,7 +505,7 @@ app.get('/health', (req, res) => {
     uptime_seconds: Math.floor(process.uptime()),
     endpoints: {
       '/v1/messages': 'Anthropic Messages API (Agent SDK, supports tool_use)',
-      '/v1/chat/completions': 'OpenAI-compatible (CLI, text-only)',
+      '/v1/chat/completions': 'OpenAI-compatible (CLI, no tool_calls)',
     },
   });
 });
