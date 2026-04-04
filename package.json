@@ -1,0 +1,30 @@
+{
+  "name": "openclaw-claude-proxy",
+  "version": "3.0.0",
+  "description": "OpenClaw Claude Code Proxy v3 \u2014 Anthropic Messages API via Agent SDK + OpenAI-compatible legacy endpoint",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [
+    "claude",
+    "proxy",
+    "openai",
+    "openclaw",
+    "ai-agent",
+    "llm",
+    "claude-max"
+  ],
+  "author": "Ultra Lab (ultralab.tw)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/photofanz/openclaw-claude-proxy-v2"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.87",
+    "express": "^4.21.0",
+    "uuid": "^11.0.0"
+  }
+}
