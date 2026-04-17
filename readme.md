@@ -20,7 +20,7 @@ Hermes / OpenClaw / 其他 Agent    Proxy (localhost:3456)            Claude Max
 | 平台 | 狀態 | API 模式 | 設定檔 |
 |------|------|----------|--------|
 | **Hermes Agent** | 主要開發對象，完整測試 | `chat_completions` | `~/.hermes/config.yaml` |
-| **OpenClaw** | 完全相容 | `openai-chat` | `~/.openclaw/openclaw.json` |
+| **OpenClaw** | 完全相容 | `openai-completions` | `~/.openclaw/openclaw.json` |
 | **其他 OpenAI-compatible 客戶端** | 相容 | 標準 OpenAI 格式 | 依客戶端而定 |
 
 本專案使用標準的 OpenAI `/v1/chat/completions` 格式，任何支援 OpenAI API 的客戶端都可以直接連接。
@@ -286,7 +286,7 @@ launchctl load ~/Library/LaunchAgents/ai.hermes.gateway.plist
 
 ## 連接 OpenClaw
 
-本專案同時相容 OpenClaw。OpenClaw 使用 `openai-chat` 模式連接同一個 proxy。
+本專案同時相容 OpenClaw。OpenClaw 在 config 中須將 `api` 欄位設為 `openai-completions`（OpenClaw schema 的合法值，指向相同的 `/v1/chat/completions` 端點）。
 
 編輯 `~/.openclaw/openclaw.json`，在 `models.providers` 加入：
 
@@ -294,7 +294,7 @@ launchctl load ~/Library/LaunchAgents/ai.hermes.gateway.plist
 "claude-proxy": {
   "baseUrl": "http://localhost:3456/v1",
   "apiKey": "",
-  "api": "openai-chat",
+  "api": "openai-completions",
   "models": [
     {
       "id": "claude-sonnet-4-6",
@@ -437,7 +437,7 @@ npm install
 
 # 更新 .env：移除 CLAUDE_CLI_PATH（不再需要）
 # 更新 Hermes config：api_mode 從 "anthropic_messages" 改為 "chat_completions"
-# 更新 OpenClaw config：api 從 "anthropic-messages" 改為 "openai-chat"
+# 更新 OpenClaw config：api 從 "anthropic-messages" 改為 "openai-completions"
 
 # 重啟
 launchctl unload ~/Library/LaunchAgents/com.openclaw.claude-proxy.plist

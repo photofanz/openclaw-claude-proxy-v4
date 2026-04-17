@@ -120,11 +120,11 @@ bash install.sh
 > 以下同時提供 Hermes Agent 和 OpenClaw 的設定方式。Hermes 是主要開發對象，OpenClaw 為相容選項。
 
 ```bash
-# 4-1a. 設定 OpenClaw claude-proxy provider（v4.0 使用 openai-chat 格式，不需要 API Key）
+# 4-1a. 設定 OpenClaw claude-proxy provider（v4.0 使用 openai-completions 格式，不需要 API Key）
 openclaw config set 'models.providers.claude-proxy' --json '{
   "baseUrl": "http://localhost:3456/v1",
   "apiKey": "",
-  "api": "openai-chat",
+  "api": "openai-completions",
   "models": [
     {
       "id": "claude-sonnet-4-6",

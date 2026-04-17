@@ -126,7 +126,7 @@ launchctl load ~/Library/LaunchAgents/ai.hermes.gateway.plist
 
 ## Step 5：設定 OpenClaw（選配，如果有安裝 OpenClaw）
 
-> 本 proxy 同時相容 OpenClaw，使用 `openai-chat` 模式連接同一個端點。
+> 本 proxy 同時相容 OpenClaw，使用 `openai-completions` 模式連接同一個端點。
 
 編輯 `~/.openclaw/openclaw.json`，在 `models.providers` 區塊加入：
 
@@ -134,7 +134,7 @@ launchctl load ~/Library/LaunchAgents/ai.hermes.gateway.plist
 "claude-proxy": {
   "baseUrl": "http://localhost:3456/v1",
   "apiKey": "",
-  "api": "openai-chat",
+  "api": "openai-completions",
   "models": [
     {
       "id": "claude-sonnet-4-6",
@@ -167,7 +167,7 @@ launchctl load ~/Library/LaunchAgents/ai.hermes.gateway.plist
 }
 ```
 
-> **注意：** v4.0 使用 `openai-chat` 格式（非 `anthropic-messages`），且不需要 API Key。
+> **注意：** v4.0 使用 OpenAI `/v1/chat/completions` 端點，OpenClaw 側的 `api` 值必須填 `openai-completions`（OpenClaw schema 的命名，並非 `openai-chat`），且不需要 API Key。
 
 設定 primary model：
 
@@ -298,4 +298,4 @@ Proxy (localhost:3456)
 - **OAuth 認證** 使用 Claude Code CLI 的登入狀態，不需要 Anthropic API Key
 - **內建工具** WebSearch、Bash、Read/Write 等，在 `allowedTools` 中設定
 - **cost 設為 0** 因為走的是 Claude Max 訂閱，不計 API 費用
-- **雙平台相容** Hermes Agent（`chat_completions`）和 OpenClaw（`openai-chat`）使用同一個 proxy
+- **雙平台相容** Hermes Agent（`chat_completions`）和 OpenClaw（`openai-completions`）使用同一個 proxy
