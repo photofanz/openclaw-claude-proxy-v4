@@ -1,4 +1,4 @@
-# OpenClaw ↔ Claude Code Proxy v4.0
+# Hermes Agent ↔ Claude Code Proxy v4.0
 
 > 把 Claude Max 訂閱（$200/月）變成免費 API，讓 OpenClaw / Hermes 等 AI agent 直接呼叫。
 
