@@ -1,6 +1,6 @@
-# OpenClaw Claude Proxy v4.0 — 安裝指南
+# Hermes Agent Claude Proxy v4.0 — 安裝指南
 
-> 把 Claude Max 訂閱（$200/月）變成免費 API，供 OpenClaw / Hermes 等 AI agent 使用。
+> 把 Claude Max 訂閱（$200/月）變成免費 API，供 Hermes Agent 使用（同時相容 OpenClaw）。
 > v4.0 使用 persistent session 架構，大幅降低 token 消耗，並內建工具支援（WebSearch、Bash 等）。
 > 適用環境：macOS（launchd 自動啟動）
 
@@ -87,7 +87,46 @@ curl -s --max-time 60 -X POST http://localhost:3456/v1/chat/completions \
 
 ---
 
-## Step 4：設定 OpenClaw（如果有安裝 OpenClaw）
+## Step 4：設定 Hermes Agent
+
+編輯 `~/.hermes/config.yaml`：
+
+```yaml
+model:
+  default: claude-sonnet-4-6
+  provider: claude-proxy
+  base_url: http://localhost:3456/v1
+
+custom_providers:
+- name: claude-proxy
+  base_url: http://localhost:3456/v1
+  api_key: ''
+  api_mode: chat_completions
+  model: claude-opus-4-7
+- name: claude-proxy
+  base_url: http://localhost:3456/v1
+  api_key: ''
+  api_mode: chat_completions
+  model: claude-sonnet-4-6
+- name: claude-proxy
+  base_url: http://localhost:3456/v1
+  api_key: ''
+  api_mode: chat_completions
+  model: claude-haiku-4-5
+```
+
+重啟 Hermes Gateway：
+
+```bash
+launchctl unload ~/Library/LaunchAgents/ai.hermes.gateway.plist
+launchctl load ~/Library/LaunchAgents/ai.hermes.gateway.plist
+```
+
+---
+
+## Step 5：設定 OpenClaw（選配，如果有安裝 OpenClaw）
+
+> 本 proxy 同時相容 OpenClaw，使用 `openai-chat` 模式連接同一個端點。
 
 編輯 `~/.openclaw/openclaw.json`，在 `models.providers` 區塊加入：
 
@@ -145,21 +184,15 @@ curl -s --max-time 60 -X POST http://localhost:3456/v1/chat/completions \
 重啟 OpenClaw Gateway：
 
 ```bash
-openclaw gateway stop
-openclaw gateway start
+launchctl unload ~/Library/LaunchAgents/ai.openclaw.gateway.plist
+launchctl load ~/Library/LaunchAgents/ai.openclaw.gateway.plist
 ```
 
 ---
 
-## Step 5：確認端對端
+## Step 6：確認端對端
 
-從 Telegram / Discord / Slack 發一則訊息給 OpenClaw bot，確認有回應。
-
-或用 CLI 測試：
-
-```bash
-openclaw agent --message "Hello" --to telegram:你的CHAT_ID
-```
+從 Telegram 發一則訊息給 Hermes bot（或 OpenClaw bot），確認有回應。
 
 ---
 
@@ -263,4 +296,6 @@ Proxy (localhost:3456)
 
 - **Persistent session** 每個 model 維護一個長期 session，system prompt 只載入一次
 - **OAuth 認證** 使用 Claude Code CLI 的登入狀態，不需要 Anthropic API Key
+- **內建工具** WebSearch、Bash、Read/Write 等，在 `allowedTools` 中設定
 - **cost 設為 0** 因為走的是 Claude Max 訂閱，不計 API 費用
+- **雙平台相容** Hermes Agent（`chat_completions`）和 OpenClaw（`openai-chat`）使用同一個 proxy

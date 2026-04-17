@@ -1,16 +1,29 @@
 # Hermes Agent ↔ Claude Code Proxy v4.0
 
-> 把 Claude Max 訂閱（$200/月）變成免費 API，讓 OpenClaw / Hermes 等 AI agent 直接呼叫。
+> 把 Claude Max 訂閱（$200/月）變成免費 API，供 Hermes Agent 及其他 AI agent 使用。
+> 同時相容 OpenClaw。
 
-**Persistent Session 架構，大幅降低 token 消耗。**
+**Persistent Session 架構，大幅降低 token 消耗，內建 WebSearch 等工具。**
 
 ```
-Agents / OpenClaw / Hermes       Proxy (localhost:3456)            Claude Max
+Hermes / OpenClaw / 其他 Agent    Proxy (localhost:3456)            Claude Max
   │                                │                                │
   ├─ POST /v1/chat/completions ──►│── SDK persistent session ─────►│ Opus/Sonnet/Haiku
   │  (OpenAI-compatible)          │   (session 重用，prompt cache)  │
   └─ GET /health, /stats ────────►│                                │
 ```
+
+---
+
+## 相容性
+
+| 平台 | 狀態 | API 模式 | 設定檔 |
+|------|------|----------|--------|
+| **Hermes Agent** | 主要開發對象，完整測試 | `chat_completions` | `~/.hermes/config.yaml` |
+| **OpenClaw** | 完全相容 | `openai-chat` | `~/.openclaw/openclaw.json` |
+| **其他 OpenAI-compatible 客戶端** | 相容 | 標準 OpenAI 格式 | 依客戶端而定 |
+
+本專案使用標準的 OpenAI `/v1/chat/completions` 格式，任何支援 OpenAI API 的客戶端都可以直接連接。
 
 ---
 
@@ -33,7 +46,7 @@ Agents / OpenClaw / Hermes       Proxy (localhost:3456)            Claude Max
 |------|------|
 | Persistent Session | 每個 model 維護長期 session，system prompt 只載入一次 |
 | 內建工具支援 | WebSearch、WebFetch、Bash、Read、Write、Edit、Grep、Glob |
-| OpenAI-compatible API | `/v1/chat/completions` — 相容所有 OpenAI 客戶端 |
+| OpenAI-compatible API | `/v1/chat/completions` — 相容 Hermes、OpenClaw 及所有 OpenAI 客戶端 |
 | 多模型路由 | Opus 4.7 / Sonnet 4.6 / Haiku 4.5，透過 `model` 參數切換 |
 | Session 自動重建 | session 異常時自動清除並重建 |
 | 請求序列化 | 同一 model 的請求自動排隊，避免並行衝突 |
@@ -190,6 +203,25 @@ curl http://localhost:3456/stats
 
 ---
 
+## 內建工具
+
+Persistent session 預設開放以下 Claude Code 工具：
+
+| 工具 | 說明 |
+|------|------|
+| `WebSearch` | 網路搜尋（即時資訊） |
+| `WebFetch` | 擷取網頁內容 |
+| `Bash(*)` | 執行所有 shell 指令 |
+| `Read` | 讀取檔案 |
+| `Write` | 寫入檔案 |
+| `Edit` | 編輯檔案 |
+| `Grep` | 搜尋檔案內容 |
+| `Glob` | 搜尋檔案路徑 |
+
+> 工具在 `server.js` 的 `allowedTools` 中設定。如需新增或移除工具，修改該陣列後重啟 proxy。
+
+---
+
 ## Plugin 系統
 
 放 `.js` 到 `plugins/` 目錄，proxy 啟動時自動載入。
@@ -213,7 +245,48 @@ module.exports = {
 
 ---
 
+## 連接 Hermes Agent
+
+Hermes Agent 是本專案的主要開發對象，使用 `chat_completions` 模式。
+
+編輯 `~/.hermes/config.yaml`：
+
+```yaml
+model:
+  default: claude-sonnet-4-6
+  provider: claude-proxy
+  base_url: http://localhost:3456/v1
+
+custom_providers:
+- name: claude-proxy
+  base_url: http://localhost:3456/v1
+  api_key: ''
+  api_mode: chat_completions
+  model: claude-opus-4-7
+- name: claude-proxy
+  base_url: http://localhost:3456/v1
+  api_key: ''
+  api_mode: chat_completions
+  model: claude-sonnet-4-6
+- name: claude-proxy
+  base_url: http://localhost:3456/v1
+  api_key: ''
+  api_mode: chat_completions
+  model: claude-haiku-4-5
+```
+
+重啟 Hermes Gateway：
+
+```bash
+launchctl unload ~/Library/LaunchAgents/ai.hermes.gateway.plist
+launchctl load ~/Library/LaunchAgents/ai.hermes.gateway.plist
+```
+
+---
+
 ## 連接 OpenClaw
+
+本專案同時相容 OpenClaw。OpenClaw 使用 `openai-chat` 模式連接同一個 proxy。
 
 編輯 `~/.openclaw/openclaw.json`，在 `models.providers` 加入：
 
@@ -266,32 +339,11 @@ module.exports = {
 }
 ```
 
-## 連接 Hermes
+重啟 OpenClaw Gateway：
 
-編輯 `~/.hermes/config.yaml`：
-
-```yaml
-model:
-  default: claude-sonnet-4-6
-  provider: claude-proxy
-  base_url: http://localhost:3456/v1
-
-custom_providers:
-- name: claude-proxy
-  base_url: http://localhost:3456/v1
-  api_key: ''
-  api_mode: chat_completions
-  model: claude-opus-4-7
-- name: claude-proxy
-  base_url: http://localhost:3456/v1
-  api_key: ''
-  api_mode: chat_completions
-  model: claude-sonnet-4-6
-- name: claude-proxy
-  base_url: http://localhost:3456/v1
-  api_key: ''
-  api_mode: chat_completions
-  model: claude-haiku-4-5
+```bash
+launchctl unload ~/Library/LaunchAgents/ai.openclaw.gateway.plist
+launchctl load ~/Library/LaunchAgents/ai.openclaw.gateway.plist
 ```
 
 ---
@@ -300,11 +352,11 @@ custom_providers:
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│  Agent Fleet (OpenClaw / Hermes / LangChain / custom)         │
+│  Hermes Agent / OpenClaw / 其他 OpenAI-compatible 客戶端      │
 │                                                                │
-│  Agent 1 ──┐                                                  │
-│  Agent 2 ──┼── HTTP Request ──┐                               │
-│  Agent 3 ──┘                  │                               │
+│  Hermes ───┐                                                  │
+│  OpenClaw ─┼── HTTP Request ──┐                               │
+│  Custom ───┘                  │                               │
 │                                ▼                               │
 │  ┌──────────────────────────────────────────────────────┐     │
 │  │  Claude Code Proxy v4.0 (localhost:3456)              │     │
@@ -316,6 +368,7 @@ custom_providers:
 │  │  │ /v1/chat/completions (OpenAI-compatible) │         │     │
 │  │  │ SDK persistent session (per model)       │         │     │
 │  │  │ Session 重用 + prompt cache              │         │     │
+│  │  │ 工具：WebSearch, Bash, Read/Write...     │         │     │
 │  │  └────────────────────┬─────────────────────┘         │     │
 │  │                       │                                │     │
 │  │  Queue: MAX_CONCURRENT=2, rate limit, auto-retry       │     │
@@ -383,8 +436,8 @@ git pull
 npm install
 
 # 更新 .env：移除 CLAUDE_CLI_PATH（不再需要）
-# 更新 OpenClaw config：api 從 "anthropic-messages" 改為 "openai-chat"
 # 更新 Hermes config：api_mode 從 "anthropic_messages" 改為 "chat_completions"
+# 更新 OpenClaw config：api 從 "anthropic-messages" 改為 "openai-chat"
 
 # 重啟
 launchctl unload ~/Library/LaunchAgents/com.openclaw.claude-proxy.plist
@@ -397,7 +450,7 @@ launchctl load ~/Library/LaunchAgents/com.openclaw.claude-proxy.plist
 
 - Original: [51AutoPilot/openclaw-claude-proxy](https://github.com/51AutoPilot/openclaw-claude-proxy)
 - Enhanced by: [Ultra Lab](https://ultralab.tw) — AI product company, Taiwan
-- Built with: [OpenClaw](https://github.com/openclaw) + [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
+- Built with: [Hermes Agent](https://github.com/hermes-ai) + [OpenClaw](https://github.com/openclaw) + [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
 
 ## License
 

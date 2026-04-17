@@ -1,7 +1,8 @@
-# OpenClaw + Claude Proxy v4.0 遠端部署指南
+# Hermes Agent + Claude Proxy v4.0 遠端部署指南
 
-> 目標：透過 SSH 在新的 Mac Mini 上安裝 OpenClaw + openclaw-claude-proxy v4.0
+> 目標：透過 SSH 在新的 Mac Mini 上安裝 Hermes Agent + Claude Proxy v4.0
 > v4.0 使用 persistent session 架構，內建 WebSearch/Bash 等工具支援
+> 同時相容 OpenClaw（可選配）
 > 工具：Claude Code 的 `openclaw-install` 技能 + 手動微調
 
 ---
@@ -114,10 +115,12 @@ bash install.sh
 
 ---
 
-## Phase 4：設定 OpenClaw 使用 Proxy
+## Phase 4：設定 Hermes Agent / OpenClaw 使用 Proxy
+
+> 以下同時提供 Hermes Agent 和 OpenClaw 的設定方式。Hermes 是主要開發對象，OpenClaw 為相容選項。
 
 ```bash
-# 4-1. 設定 claude-proxy provider（v4.0 使用 openai-chat 格式，不需要 API Key）
+# 4-1a. 設定 OpenClaw claude-proxy provider（v4.0 使用 openai-chat 格式，不需要 API Key）
 openclaw config set 'models.providers.claude-proxy' --json '{
   "baseUrl": "http://localhost:3456/v1",
   "apiKey": "",
@@ -153,7 +156,30 @@ openclaw config set 'models.providers.claude-proxy' --json '{
   ]
 }'
 
-# 4-2. 設定 primary model
+# 4-1b. 設定 Hermes Agent（編輯 ~/.hermes/config.yaml）
+# model:
+#   default: claude-sonnet-4-6
+#   provider: claude-proxy
+#   base_url: http://localhost:3456/v1
+#
+# custom_providers:
+# - name: claude-proxy
+#   base_url: http://localhost:3456/v1
+#   api_key: ''
+#   api_mode: chat_completions
+#   model: claude-opus-4-7
+# - name: claude-proxy
+#   base_url: http://localhost:3456/v1
+#   api_key: ''
+#   api_mode: chat_completions
+#   model: claude-sonnet-4-6
+# - name: claude-proxy
+#   base_url: http://localhost:3456/v1
+#   api_key: ''
+#   api_mode: chat_completions
+#   model: claude-haiku-4-5
+
+# 4-2. 設定 OpenClaw primary model
 openclaw config set agents.defaults.model.primary "claude-proxy/claude-sonnet-4-6"
 
 # 4-3. 設定 fallback（可選）
@@ -238,14 +264,16 @@ Telegram User
 Telegram Bot API
   │
   ▼
-OpenClaw Gateway (port 18789)     ← LaunchAgent: ai.openclaw.gateway
+Hermes Gateway                    ← LaunchAgent: ai.hermes.gateway
+  │  (或 OpenClaw Gateway          ← LaunchAgent: ai.openclaw.gateway)
   │
   ▼
-Claude Proxy (port 3456)          ← LaunchAgent: com.openclaw.claude-proxy
+Claude Proxy v4.0 (port 3456)    ← LaunchAgent: com.openclaw.claude-proxy
+  │  Persistent session + 工具支援
   │
   ▼
 Claude Max Subscription (OAuth)
-  Sonnet 4.6 / Opus 4.7 / Haiku 4.5
+  Opus 4.7 · Sonnet 4.6 · Haiku 4.5
 ```
 
-兩個 LaunchAgent 都是開機自動啟動，不需要手動維護。
+所有 LaunchAgent 開機自動啟動。Hermes 和 OpenClaw 可同時連接同一個 proxy。
