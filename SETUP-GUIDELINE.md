@@ -133,8 +133,8 @@ openclaw config set 'models.providers.claude-proxy' --json '{
       "maxTokens": 16384
     },
     {
-      "id": "claude-opus-4-6",
-      "name": "Claude Opus 4.6 (proxy)",
+      "id": "claude-opus-4-7",
+      "name": "Claude Opus 4.7 (proxy)",
       "reasoning": true,
       "input": ["text", "image"],
       "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
@@ -157,7 +157,7 @@ openclaw config set 'models.providers.claude-proxy' --json '{
 openclaw config set agents.defaults.model.primary "claude-proxy/claude-sonnet-4-6"
 
 # 4-3. 設定 fallback（可選）
-openclaw config set agents.defaults.model.fallbacks --json '["claude-proxy/claude-opus-4-6", "claude-proxy/claude-haiku-4-5"]'
+openclaw config set agents.defaults.model.fallbacks --json '["claude-proxy/claude-opus-4-7", "claude-proxy/claude-haiku-4-5"]'
 ```
 
 ---
@@ -245,7 +245,7 @@ Claude Proxy (port 3456)          ← LaunchAgent: com.openclaw.claude-proxy
   │
   ▼
 Claude Max Subscription (OAuth)
-  Sonnet 4.6 / Opus 4.6 / Haiku 4.5
+  Sonnet 4.6 / Opus 4.7 / Haiku 4.5
 ```
 
 兩個 LaunchAgent 都是開機自動啟動，不需要手動維護。

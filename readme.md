@@ -34,7 +34,7 @@ Agents / OpenClaw / Hermes       Proxy (localhost:3456)            Claude Max
 | Persistent Session | 每個 model 維護長期 session，system prompt 只載入一次 |
 | 內建工具支援 | WebSearch、WebFetch、Bash、Read、Write、Edit、Grep、Glob |
 | OpenAI-compatible API | `/v1/chat/completions` — 相容所有 OpenAI 客戶端 |
-| 多模型路由 | Opus 4.6 / Sonnet 4.6 / Haiku 4.5，透過 `model` 參數切換 |
+| 多模型路由 | Opus 4.7 / Sonnet 4.6 / Haiku 4.5，透過 `model` 參數切換 |
 | Session 自動重建 | session 異常時自動清除並重建 |
 | 請求序列化 | 同一 model 的請求自動排隊，避免並行衝突 |
 | Plugin 系統 | pre/post 處理 hooks，放 `.js` 到 `plugins/` 即生效 |
@@ -176,8 +176,8 @@ curl http://localhost:3456/stats
 ## 多模型路由
 
 ```bash
-# Opus 4.6 — 複雜推理，最強
-"model": "claude-opus-4-6"
+# Opus 4.7 — 複雜推理，最強
+"model": "claude-opus-4-7"
 
 # Sonnet 4.6 — 快速，品質好（推薦）
 "model": "claude-sonnet-4-6"
@@ -233,8 +233,8 @@ module.exports = {
       "maxTokens": 16384
     },
     {
-      "id": "claude-opus-4-6",
-      "name": "Claude Opus 4.6 (proxy)",
+      "id": "claude-opus-4-7",
+      "name": "Claude Opus 4.7 (proxy)",
       "reasoning": true,
       "input": ["text", "image"],
       "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
@@ -281,7 +281,7 @@ custom_providers:
   base_url: http://localhost:3456/v1
   api_key: ''
   api_mode: chat_completions
-  model: claude-opus-4-6
+  model: claude-opus-4-7
 - name: claude-proxy
   base_url: http://localhost:3456/v1
   api_key: ''
@@ -325,7 +325,7 @@ custom_providers:
 │                          ▼                                       │
 │  ┌──────────────────────────────────────────────────────┐     │
 │  │  Claude Max Subscription (OAuth)                      │     │
-│  │  Opus 4.6 · Sonnet 4.6 · Haiku 4.5                  │     │
+│  │  Opus 4.7 · Sonnet 4.6 · Haiku 4.5                  │     │
 │  └──────────────────────────────────────────────────────┘     │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -336,7 +336,7 @@ custom_providers:
 
 | | Anthropic API | Claude Max + Proxy |
 |---|---|---|
-| Opus 4.6 | $15/M input, $75/M output | $200/月吃到飽 |
+| Opus 4.7 | $15/M input, $75/M output | $200/月吃到飽 |
 | 10 萬 tokens/天 | ~$225/月 | $200/月 |
 | 50 萬 tokens/天 | ~$1,125/月 | $200/月 |
 | 損益平衡 | ~8.9 萬 tokens/天 | 超過就是賺 |

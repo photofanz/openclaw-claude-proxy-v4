@@ -348,7 +348,7 @@ app.get('/v1/models', auth, (req, res) => {
   res.json({
     object: 'list',
     data: [
-      { id: 'claude-opus-4-6', object: 'model', created: 1700000000, owned_by: 'anthropic' },
+      { id: 'claude-opus-4-7', object: 'model', created: 1700000000, owned_by: 'anthropic' },
       { id: 'claude-sonnet-4-6', object: 'model', created: 1700000000, owned_by: 'anthropic' },
       { id: 'claude-haiku-4-5', object: 'model', created: 1700000000, owned_by: 'anthropic' },
     ],

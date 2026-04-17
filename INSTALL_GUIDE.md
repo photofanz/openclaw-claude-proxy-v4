@@ -107,8 +107,8 @@ curl -s --max-time 60 -X POST http://localhost:3456/v1/chat/completions \
       "maxTokens": 16384
     },
     {
-      "id": "claude-opus-4-6",
-      "name": "Claude Opus 4.6 (proxy)",
+      "id": "claude-opus-4-7",
+      "name": "Claude Opus 4.7 (proxy)",
       "reasoning": true,
       "input": ["text", "image"],
       "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
