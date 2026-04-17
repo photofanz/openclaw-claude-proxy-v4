@@ -34,7 +34,7 @@ claude auth login
 
 ```bash
 cd ~
-git clone https://github.com/photofanz/openclaw-claude-proxy-v2.git
+git clone https://github.com/photofanz/openclaw-claude-proxy-v4.git
 cd openclaw-claude-proxy
 ```
 

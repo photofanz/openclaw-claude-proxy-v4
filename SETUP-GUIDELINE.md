@@ -22,10 +22,10 @@
 
 ```bash
 # 打包檔
-ls -lh ~/openclaw-claude-proxy-v3.0-deploy.tar.gz
+ls -lh ~/openclaw-claude-proxy-v4.0-deploy.tar.gz
 
 # 或直接用 GitHub
-# https://github.com/photofanz/openclaw-claude-proxy-v2
+# https://github.com/photofanz/openclaw-claude-proxy-v4
 ```
 
 ---
@@ -87,18 +87,18 @@ echo "hello" | claude --print
 
 ---
 
-## Phase 3：安裝 openclaw-claude-proxy-v2（SSH 進去）
+## Phase 3：安裝 openclaw-claude-proxy-v4（SSH 進去）
 
 ```bash
 # 3-1. 傳檔案到 Mac Mini
-scp ~/openclaw-claude-proxy-v3.0-deploy.tar.gz user@<MAC_MINI_IP>:~/
+scp ~/openclaw-claude-proxy-v4.0-deploy.tar.gz user@<MAC_MINI_IP>:~/
 
 # 3-2. SSH 進去
 ssh user@<MAC_MINI_IP>
 
 # 3-3. 解壓安裝
 mkdir -p ~/openclaw-claude-proxy && cd ~/openclaw-claude-proxy
-tar xzf ~/openclaw-claude-proxy-v3.0-deploy.tar.gz
+tar xzf ~/openclaw-claude-proxy-v4.0-deploy.tar.gz
 bash install.sh
 
 # install.sh 會自動：

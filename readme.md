@@ -74,7 +74,7 @@ echo "hello" | claude --print
 ### 方法一：一鍵安裝（推薦）
 
 ```bash
-git clone https://github.com/photofanz/openclaw-claude-proxy-v2.git openclaw-claude-proxy
+git clone https://github.com/photofanz/openclaw-claude-proxy-v4.git openclaw-claude-proxy
 cd openclaw-claude-proxy
 bash install.sh
 ```
@@ -82,7 +82,7 @@ bash install.sh
 ### 方法二：手動安裝
 
 ```bash
-git clone https://github.com/photofanz/openclaw-claude-proxy-v2.git openclaw-claude-proxy
+git clone https://github.com/photofanz/openclaw-claude-proxy-v4.git openclaw-claude-proxy
 cd openclaw-claude-proxy
 npm install
 cp .env.example .env
