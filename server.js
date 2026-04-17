@@ -190,10 +190,13 @@ function auth(req, res, next) {
 // Model mapping
 // ---------------------------------------------------------------------------
 function resolveModel(model) {
-  if (!model) return 'sonnet';
-  if (model.includes('opus')) return 'opus';
-  if (model.includes('haiku')) return 'haiku';
-  return 'sonnet';
+  if (!model) return 'claude-sonnet-4-6';
+  // 完整 model ID 直接使用（如 claude-opus-4-7）
+  if (model.startsWith('claude-')) return model;
+  // 短別名映射
+  if (model.includes('opus')) return 'claude-opus-4-7';
+  if (model.includes('haiku')) return 'claude-haiku-4-5';
+  return 'claude-sonnet-4-6';
 }
 
 // ---------------------------------------------------------------------------
