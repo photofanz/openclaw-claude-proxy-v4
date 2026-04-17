@@ -61,7 +61,13 @@ async function sendToSession(model, userMessage) {
         // Lazy 建立 session
         if (!sessions[sdkModel]) {
           const { unstable_v2_createSession } = getSDK();
-          sessions[sdkModel] = unstable_v2_createSession({ model: sdkModel });
+          sessions[sdkModel] = unstable_v2_createSession({
+            model: sdkModel,
+            allowedTools: [
+              'WebSearch', 'WebFetch', 'Read', 'Grep', 'Glob',
+              'Bash(*)', 'Write', 'Edit',
+            ],
+          });
           console.log(`  [session] Created persistent session for model=${sdkModel}`);
         }
 

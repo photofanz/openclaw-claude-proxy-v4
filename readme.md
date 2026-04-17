@@ -23,6 +23,7 @@ Agents / OpenClaw / Hermes       Proxy (localhost:3456)            Claude Max
 | 端點 | `/v1/messages` + `/v1/chat/completions` | 統一 `/v1/chat/completions` |
 | API 格式 | Anthropic + OpenAI | 統一 OpenAI-compatible |
 | Extra usage 問題 | 大 system prompt 容易觸發 | 解決（persistent session 不重複載入） |
+| 工具支援 | 無（純文字回覆） | 內建 WebSearch、Bash、Read/Write 等工具 |
 
 ---
 
@@ -31,6 +32,7 @@ Agents / OpenClaw / Hermes       Proxy (localhost:3456)            Claude Max
 | 功能 | 說明 |
 |------|------|
 | Persistent Session | 每個 model 維護長期 session，system prompt 只載入一次 |
+| 內建工具支援 | WebSearch、WebFetch、Bash、Read、Write、Edit、Grep、Glob |
 | OpenAI-compatible API | `/v1/chat/completions` — 相容所有 OpenAI 客戶端 |
 | 多模型路由 | Opus 4.6 / Sonnet 4.6 / Haiku 4.5，透過 `model` 參數切換 |
 | Session 自動重建 | session 異常時自動清除並重建 |
@@ -367,6 +369,7 @@ launchctl unload ~/Library/LaunchAgents/com.openclaw.claude-proxy.plist
 | `health` 無回應 | Proxy 沒在跑 | `launchctl load ~/Library/LaunchAgents/com.openclaw.claude-proxy.plist` |
 | 回應很慢（>30 秒） | 大 prompt 或 Claude 限速 | 正常現象；確認 `MAX_CONCURRENT=2` |
 | `extra usage` 錯誤 | Claude 帳號月額度用盡 | 等月初重置或購買額度 |
+| WebSearch/工具被擋 | session 沒有工具權限 | 確認 `allowedTools` 設定正確，重啟 proxy |
 | Session 建立失敗 | Claude CLI 未登入 | 執行 `claude auth login` 重新登入 |
 | 頻繁 session 重建 | 網路不穩 | 檢查 log，確認 OAuth 有效 |
 

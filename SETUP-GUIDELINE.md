@@ -1,6 +1,7 @@
-# OpenClaw + Claude Proxy 遠端部署指南
+# OpenClaw + Claude Proxy v4.0 遠端部署指南
 
-> 目標：透過 SSH 在新的 Mac Mini 上安裝 OpenClaw + openclaw-claude-proxy-v2
+> 目標：透過 SSH 在新的 Mac Mini 上安裝 OpenClaw + openclaw-claude-proxy v4.0
+> v4.0 使用 persistent session 架構，內建 WebSearch/Bash 等工具支援
 > 工具：Claude Code 的 `openclaw-install` 技能 + 手動微調
 
 ---
@@ -116,29 +117,20 @@ bash install.sh
 ## Phase 4：設定 OpenClaw 使用 Proxy
 
 ```bash
-# 4-1. 設定 claude-proxy provider
+# 4-1. 設定 claude-proxy provider（v4.0 使用 openai-chat 格式，不需要 API Key）
 openclaw config set 'models.providers.claude-proxy' --json '{
   "baseUrl": "http://localhost:3456/v1",
-  "apiKey": "安裝時產生的API_KEY",
-  "api": "anthropic-messages",
+  "apiKey": "",
+  "api": "openai-chat",
   "models": [
     {
       "id": "claude-sonnet-4-6",
       "name": "Claude Sonnet 4.6 (proxy)",
-      "reasoning": false,
+      "reasoning": true,
       "input": ["text", "image"],
       "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
       "contextWindow": 200000,
-      "maxTokens": 8192
-    },
-    {
-      "id": "claude-haiku-4-5",
-      "name": "Claude Haiku 4.5 (proxy)",
-      "reasoning": false,
-      "input": ["text", "image"],
-      "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
-      "contextWindow": 200000,
-      "maxTokens": 8192
+      "maxTokens": 16384
     },
     {
       "id": "claude-opus-4-6",
@@ -148,6 +140,15 @@ openclaw config set 'models.providers.claude-proxy' --json '{
       "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
       "contextWindow": 200000,
       "maxTokens": 16384
+    },
+    {
+      "id": "claude-haiku-4-5",
+      "name": "Claude Haiku 4.5 (proxy)",
+      "reasoning": false,
+      "input": ["text", "image"],
+      "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
+      "contextWindow": 200000,
+      "maxTokens": 8192
     }
   ]
 }'
@@ -199,10 +200,9 @@ openclaw config set tools.sandbox.tools.alsoAllow --json '["agent-browser", "bro
 curl -s http://localhost:3456/health | python3 -m json.tool
 
 # 6-2. Proxy API 測試
-curl -s -X POST http://localhost:3456/v1/messages \
+curl -s -X POST http://localhost:3456/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -H "x-api-key: 你的API_KEY" \
-  -d '{"model":"claude-haiku-4-5","max_tokens":50,"messages":[{"role":"user","content":"Say OK"}]}'
+  -d '{"model":"claude-sonnet-4-6","messages":[{"role":"user","content":"Say OK"}]}'
 
 # 6-3. OpenClaw Gateway 狀態
 openclaw gateway status
@@ -222,8 +222,9 @@ openclaw gateway status
 | Proxy health 無回應 | `lsof -i :3456` | 重啟：`launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.openclaw.claude-proxy.plist && sleep 2 && launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.openclaw.claude-proxy.plist` |
 | Bot 不回應 | `openclaw gateway status` | `openclaw gateway stop && openclaw gateway start` |
 | 回應說不能讀圖 | 檢查 model config 的 input | 確認有 `["text", "image"]` |
-| 401 認證錯誤 | API Key 不一致 | 確認 openclaw.json 裡的 apiKey 與 proxy .env 的 API_KEY 相同 |
+| WebSearch/工具被擋 | session 沒有工具權限 | 確認 server.js 的 `allowedTools` 設定，重啟 proxy |
 | Claude CLI 未認證 | `claude auth status` | `claude auth login` 重新登入 |
+| `extra usage` 錯誤 | Claude 帳號月額度用盡 | 等月初重置或購買額度 |
 | Telegram 連不上 | IPv6 問題 | 見 Phase 5-1 |
 
 ---
