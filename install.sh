@@ -1,6 +1,6 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════════════════════
-# OpenClaw Claude Proxy v3.0 — One-Click Installer (macOS)
+# Hermes / Claude Code Proxy v4.0 — One-Click Installer (macOS)
 #
 # Prerequisites:
 #   - Node.js 18+ (brew install node)
@@ -8,7 +8,7 @@
 #   - Claude Max subscription active
 #
 # Usage:
-#   git clone https://github.com/photofanz/openclaw-claude-proxy-v2.git
+#   git clone https://github.com/photofanz/openclaw-claude-proxy-v4.git openclaw-claude-proxy
 #   cd openclaw-claude-proxy
 #   bash install.sh
 # ═══════════════════════════════════════════════════════════════
@@ -25,7 +25,7 @@ NC='\033[0m'
 
 echo -e "${CYAN}"
 echo '╔════════════════════════════════════════════════════╗'
-echo '║  OpenClaw ↔ Claude Code Proxy v3.0 Installer      ║'
+echo '║  Hermes / Claude Code Proxy v4.0 Installer        ║'
 echo '╚════════════════════════════════════════════════════╝'
 echo -e "${NC}"
 
@@ -73,26 +73,22 @@ echo -e "  ${GREEN}✓${NC} npm packages installed"
 # ─── Step 3: Configure .env ───────────────────────────────────
 echo -e "${CYAN}[3/7] Configuring .env...${NC}"
 
+# v4 default: no auth for local loopback use.
+# Set API_KEY=... in .env manually if you want request auth (e.g. remote exposure).
 if [ ! -f .env ]; then
-    # Generate random API key
-    API_KEY="sk-openclaw-$(openssl rand -hex 16)"
-
     cat > .env <<ENVEOF
 PORT=3456
-API_KEY=${API_KEY}
-CLAUDE_CLI_PATH=${CLAUDE_CLI}
+API_KEY=
 MAX_CONCURRENT=2
 REQUEST_TIMEOUT=300000
 MAX_RETRIES=1
 PLUGINS_DIR=./plugins
 ENVEOF
-    echo -e "  ${GREEN}✓${NC} .env created"
-    echo -e "  ${YELLOW}⚠ API Key: ${API_KEY}${NC}"
-    echo "    Save this key — you'll need it for OpenClaw config"
+    echo -e "  ${GREEN}✓${NC} .env created (no auth by default; set API_KEY in .env for auth)"
 else
     echo -e "  ${YELLOW}→${NC} .env already exists, skipping"
-    API_KEY=$(grep "^API_KEY=" .env | cut -d= -f2)
 fi
+API_KEY=$(grep "^API_KEY=" .env | cut -d= -f2 | tr -d '"' | tr -d "'")
 
 # ─── Step 4: Verify Agent SDK ─────────────────────────────────
 echo -e "${CYAN}[4/7] Verifying Agent SDK...${NC}"
@@ -100,7 +96,7 @@ echo -e "${CYAN}[4/7] Verifying Agent SDK...${NC}"
 SDK_TEST=$(node -e "
 const { query } = require('@anthropic-ai/claude-agent-sdk');
 async function t() {
-  const q = query({ prompt: 'Say OK', options: { maxTurns: 1 } });
+  const q = query({ prompt: 'Say OK' });
   for await (const m of q) {
     if (m.type === 'assistant') { console.log('OK'); break; }
   }
@@ -144,8 +140,6 @@ cat > "$PLIST_FILE" <<PLISTEOF
         <string>3456</string>
         <key>API_KEY</key>
         <string>${API_KEY}</string>
-        <key>CLAUDE_CLI_PATH</key>
-        <string>${CLAUDE_CLI}</string>
         <key>MAX_CONCURRENT</key>
         <string>2</string>
         <key>MAX_RETRIES</key>
@@ -192,32 +186,57 @@ fi
 echo -e "${CYAN}[7/7] Done!${NC}"
 echo ""
 echo -e "${GREEN}╔════════════════════════════════════════════════════╗${NC}"
-echo -e "${GREEN}║  Proxy v3.0 is running!                           ║${NC}"
+echo -e "${GREEN}║  Proxy v4.0 is running!                           ║${NC}"
 echo -e "${GREEN}╠════════════════════════════════════════════════════╣${NC}"
 echo -e "${GREEN}║                                                   ║${NC}"
-echo -e "${GREEN}║  Endpoints:                                       ║${NC}"
-echo -e "${GREEN}║    POST http://localhost:3456/v1/messages          ║${NC}"
-echo -e "${GREEN}║    POST http://localhost:3456/v1/chat/completions  ║${NC}"
-echo -e "${GREEN}║    GET  http://localhost:3456/health               ║${NC}"
+echo -e "${GREEN}║  Endpoints (OpenAI-compatible, unified):          ║${NC}"
+echo -e "${GREEN}║    POST http://localhost:3456/v1/chat/completions ║${NC}"
+echo -e "${GREEN}║    GET  http://localhost:3456/v1/models           ║${NC}"
+echo -e "${GREEN}║    GET  http://localhost:3456/health              ║${NC}"
+echo -e "${GREEN}║    GET  http://localhost:3456/stats               ║${NC}"
 echo -e "${GREEN}║                                                   ║${NC}"
-echo -e "${GREEN}║  API Key: ${API_KEY:0:30}...  ║${NC}"
+if [ -n "$API_KEY" ]; then
+echo -e "${GREEN}║  API Key: ${API_KEY:0:30}...                       ║${NC}"
+else
+echo -e "${GREEN}║  API Key: (none — local loopback, no auth)        ║${NC}"
+fi
 echo -e "${GREEN}║                                                   ║${NC}"
 echo -e "${GREEN}║  Logs:                                            ║${NC}"
-echo -e "${GREEN}║    ${LOG_DIR}/claude-proxy.log          ║${NC}"
+echo -e "${GREEN}║    ${LOG_DIR}/claude-proxy.log         ║${NC}"
 echo -e "${GREEN}║                                                   ║${NC}"
 echo -e "${GREEN}╚════════════════════════════════════════════════════╝${NC}"
 echo ""
-echo -e "${YELLOW}Next: Configure OpenClaw to use this proxy${NC}"
+echo -e "${YELLOW}Next: Configure your client to use this proxy${NC}"
 echo ""
+echo "  ── OpenClaw ────────────────────────────────────"
 echo "  Add to ~/.openclaw/openclaw.json → models.providers:"
 echo ""
-echo '  "anthropic-claude": {'
+echo '  "claude-proxy": {'
 echo '    "baseUrl": "http://localhost:3456/v1",'
 echo "    \"apiKey\": \"${API_KEY}\","
-echo '    "api": "anthropic-messages",'
+echo '    "api": "openai-completions",'
 echo '    "models": ['
-echo '      {"id": "claude-sonnet-4-6", "name": "Claude Sonnet 4.6 (proxy)", "reasoning": false, "input": ["text"], "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0}, "contextWindow": 200000, "maxTokens": 8192},'
-echo '      {"id": "claude-haiku-4-5", "name": "Claude Haiku 4.5 (proxy)", "reasoning": false, "input": ["text"], "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0}, "contextWindow": 200000, "maxTokens": 8192},'
-echo '      {"id": "claude-opus-4-6", "name": "Claude Opus 4.6 (proxy)", "reasoning": true, "input": ["text"], "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0}, "contextWindow": 200000, "maxTokens": 16384}'
+echo '      {"id": "claude-opus-4-7", "name": "Claude Opus 4.7 (proxy)", "reasoning": true, "input": ["text","image"], "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0}, "contextWindow": 200000, "maxTokens": 16384},'
+echo '      {"id": "claude-sonnet-4-6", "name": "Claude Sonnet 4.6 (proxy)", "reasoning": true, "input": ["text","image"], "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0}, "contextWindow": 200000, "maxTokens": 16384},'
+echo '      {"id": "claude-haiku-4-5", "name": "Claude Haiku 4.5 (proxy)", "reasoning": false, "input": ["text","image"], "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0}, "contextWindow": 200000, "maxTokens": 8192}'
 echo '    ]'
 echo '  }'
+echo ""
+echo "  Then set primary model:"
+echo "    openclaw config set agents.defaults.model.primary \"claude-proxy/claude-sonnet-4-6\""
+echo ""
+echo "  ── Hermes Agent ────────────────────────────────"
+echo "  Edit ~/.hermes/config.yaml:"
+echo ""
+echo "    model:"
+echo "      default: claude-sonnet-4-6"
+echo "      provider: claude-proxy"
+echo "      base_url: http://localhost:3456/v1"
+echo ""
+echo "    custom_providers:"
+echo "    - name: claude-proxy"
+echo "      base_url: http://localhost:3456/v1"
+echo "      api_key: '${API_KEY}'"
+echo "      api_mode: chat_completions"
+echo "      model: claude-sonnet-4-6"
+echo ""

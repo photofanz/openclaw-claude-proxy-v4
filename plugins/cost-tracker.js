@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 
 const API_PRICING = {
-  'claude-opus-4-6':    { input: 15.00, output: 75.00 },  // per 1M tokens
+  'claude-opus-4-7':    { input: 15.00, output: 75.00 },  // per 1M tokens
   'claude-sonnet-4-6':  { input: 3.00,  output: 15.00 },
   'claude-haiku-4-5':   { input: 0.80,  output: 4.00 },
 };
@@ -35,7 +35,7 @@ module.exports = {
   postProcess(text, model) {
     if (!text) return text;
 
-    const pricing = API_PRICING[model] || API_PRICING['claude-opus-4-6'];
+    const pricing = API_PRICING[model] || API_PRICING['claude-opus-4-7'];
     const outputTokens = Math.ceil(text.length / 4);
     const saved = (outputTokens / 1_000_000) * pricing.output;
 

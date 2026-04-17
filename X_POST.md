@@ -1,39 +1,38 @@
-Opus 4.6 API 一個月燒幾千美金。
+Opus 4.7 API 一個月燒幾千美金。
 
-我花 $200 搞了一個 24/7 的 Telegram AI 助手，大腦是 Opus 4.6，能聊天、能讀寫檔案、能跑 shell、能操作瀏覽器。
+我花 $200 搞了一個 24/7 的 Telegram AI 助手，大腦是 Opus 4.7，能聊天、能讀寫檔案、能跑 shell、能搜網、能讀圖。
 
-做法很簡單：
+做法：
 
-Claude Max 訂閱 $200/月，透過 Claude Code CLI 的 --print 模式驅動。中間寫了一層 Node.js Proxy 把 CLI 輸出包成 OpenAI 相容格式，接上 OpenClaw 這個 Agent 框架，再串 Telegram Bot。
-
-全部跑在一台 VPS 上（我用 AWS Free Tier，免費）。
+Claude Max 訂閱 $200/月，透過 Claude Agent SDK 為每個模型維持一條 persistent session。中間寫了一層 Node.js Proxy，把 SDK 輸出包成 OpenAI `/v1/chat/completions` 相容格式，接上 Hermes Agent（或相容的 OpenClaw）當控制層，再串 Telegram Bot。
 
 架構：
-Telegram → OpenClaw Gateway → Proxy → claude --print → Anthropic API
+Telegram → Hermes Gateway → Proxy v4 → Claude Agent SDK → Claude Max
 
-所有 Request 從官方 Binary 出去，跟你坐在 Terminal 前打字一模一樣。不偷 Session Token，不怕封號。
+所有 Request 走官方 SDK + OAuth，跟你坐在 Terminal 前打 `claude` 一模一樣。不偷 Session Token，不怕封號。
 
-為什麼跑在 VPS 不跑本機？因為 OpenClaw 的 Agent 能讀寫檔案、跑指令。放你的 Mac 上，你的照片密碼私鑰全暴露。VPS 是空機器，壞了砍掉重建。
+v4 對 v3 最有感的兩個升級：
 
-踩了 8 個坑才搞定。最刺激的一個：OpenClaw 的 system prompt + 工具定義太大，直接把 Linux 的命令列參數上限撐爆（E2BIG）。解法：prompt 改走 stdin 管道。
+1. Persistent Session：每個模型維護一條長期 session，system prompt 只載入一次，靠 prompt cache 重用。省掉每輪 ~8K 的 CLI system prompt 重複載入，額度撐更久。
+2. 內建工具：proxy 層直接開 WebSearch、WebFetch、Bash、Read/Write/Edit、Grep、Glob。上層 Agent 不用自己再實作一套。
 
-寫了一個一鍵安裝腳本。你只需要：
+跑在 Mac Mini 上，macOS launchd 開機自啟。不建議塞到個人 Mac——下游 Agent 會讀寫檔案、跑指令，把你家目錄的照片密碼私鑰全暴露很危險。租一台專用 Mac Mini 最乾淨，壞了砍掉重建。
 
-1. 一台 Ubuntu 機器（任何 VPS 都行，2GB RAM 以上）
-2. 訂閱 Claude Max
-3. 跟 @BotFather 建一個 Telegram Bot
-4. SSH 進去跑兩行指令：
+踩了不少坑才搞定。最新一個：自己的文件寫 `"api": "openai-chat"`，但下游 OpenClaw schema 只吃 `openai-completions`。文件 bug 比 code bug 難抓。
 
-curl -fsSL <GitHub連結> -o setup.sh
-bash setup.sh
+一鍵安裝（macOS）：
 
-輸入 Bot Token 和你的 Telegram ID，5 分鐘自動裝完。
+```
+git clone https://github.com/photofanz/openclaw-claude-proxy-v4.git openclaw-claude-proxy
+cd openclaw-claude-proxy
+bash install.sh
+```
 
-腳本做的事：裝 Node.js 22 → PM2 → Claude Code CLI → 部署 Proxy → 裝 OpenClaw → 設定自訂 Provider → 設定 Telegram 白名單 → 建 systemd 開機自啟。
+腳本做的事：檢查 Node.js + Claude CLI 登入 → npm install（含 Agent SDK）→ 產 .env → Agent SDK 煙霧測試 → 建 LaunchAgent（開機自啟）→ 健康檢查 → 印出 Hermes / OpenClaw 兩套 config 範本。
 
-原始碼和腳本都在 GitHub。
+Hermes 和 OpenClaw 可同時連同一個 proxy，共用 Claude Max 額度。原始碼全部在 GitHub。
 
-$200/月，你自己的 Opus 4.6 隨身顧問。
+$200/月，你自己的 Opus 4.7 隨身顧問。
 
 ---
 
