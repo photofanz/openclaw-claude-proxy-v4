@@ -1,7 +1,7 @@
 {
   "name": "openclaw-claude-proxy",
-  "version": "3.0.0",
-  "description": "OpenClaw Claude Code Proxy v3 \u2014 Anthropic Messages API via Agent SDK + OpenAI-compatible legacy endpoint",
+  "version": "4.0.0",
+  "description": "OpenClaw Claude Code Proxy v4 \u2014 Persistent Session Edition, OpenAI-compatible endpoint via Agent SDK",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

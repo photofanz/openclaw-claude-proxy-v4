@@ -1,18 +1,28 @@
-# OpenClaw ↔ Claude Code Proxy v3.0
+# OpenClaw ↔ Claude Code Proxy v4.0
 
-> 把 Claude Max 訂閱（$200/月）變成免費 API，讓 OpenClaw 等 AI agent 直接呼叫。
+> 把 Claude Max 訂閱（$200/月）變成免費 API，讓 OpenClaw / Hermes 等 AI agent 直接呼叫。
 
-**一個 Proxy，全系列模型，零 API 費用。**
+**Persistent Session 架構，大幅降低 token 消耗。**
 
 ```
-Agents / OpenClaw               Proxy (localhost:3456)            Claude Max
+Agents / OpenClaw / Hermes       Proxy (localhost:3456)            Claude Max
   │                                │                                │
-  ├─ POST /v1/messages ──────────►│── Agent SDK query() ──────────►│ Opus/Sonnet/Haiku
-  │  (Anthropic Messages API)     │                                │
-  ├─ POST /v1/chat/completions ──►│── claude --print (CLI) ───────►│ Opus/Sonnet/Haiku
-  │  (OpenAI-compatible, legacy)  │                                │
+  ├─ POST /v1/chat/completions ──►│── SDK persistent session ─────►│ Opus/Sonnet/Haiku
+  │  (OpenAI-compatible)          │   (session 重用，prompt cache)  │
   └─ GET /health, /stats ────────►│                                │
 ```
+
+---
+
+## v4.0 重大變更
+
+| 項目 | v3.0 | v4.0 |
+|------|------|------|
+| 後端 | `claude --print`（每次新 session） | SDK persistent session（重用 session） |
+| Token 消耗 | 高（每次載入 ~8K CLI system prompt） | 低（system prompt 只載入一次，靠 cache） |
+| 端點 | `/v1/messages` + `/v1/chat/completions` | 統一 `/v1/chat/completions` |
+| API 格式 | Anthropic + OpenAI | 統一 OpenAI-compatible |
+| Extra usage 問題 | 大 system prompt 容易觸發 | 解決（persistent session 不重複載入） |
 
 ---
 
@@ -20,13 +30,15 @@ Agents / OpenClaw               Proxy (localhost:3456)            Claude Max
 
 | 功能 | 說明 |
 |------|------|
-| Anthropic Messages API | `/v1/messages` — Agent SDK 後端，支援回傳 tool_use block |
-| OpenAI-compatible API | `/v1/chat/completions` — CLI 後端，向下相容（不支援 tool_calls） |
+| Persistent Session | 每個 model 維護長期 session，system prompt 只載入一次 |
+| OpenAI-compatible API | `/v1/chat/completions` — 相容所有 OpenAI 客戶端 |
 | 多模型路由 | Opus 4.6 / Sonnet 4.6 / Haiku 4.5，透過 `model` 參數切換 |
+| Session 自動重建 | session 異常時自動清除並重建 |
+| 請求序列化 | 同一 model 的請求自動排隊，避免並行衝突 |
 | Plugin 系統 | pre/post 處理 hooks，放 `.js` 到 `plugins/` 即生效 |
-| 用量統計 | `GET /stats` — 請求數、token 估算、平均回應時間 |
-| 自動重試 | CLI 端點失敗時自動重試（`MAX_RETRIES`） |
-| 內建 3 個 Plugin | 語言強化、內容過濾、成本追蹤 |
+| 用量統計 | `GET /stats` — 請求數、token 估算、活躍 session |
+| 自動重試 | 失敗時自動重試（`MAX_RETRIES`） |
+| Streaming | 支援 simulated SSE streaming |
 
 ---
 
@@ -36,8 +48,8 @@ Agents / OpenClaw               Proxy (localhost:3456)            Claude Max
 |------|------|----------|
 | macOS | 10.15+ | — |
 | Node.js | 18+ | `node --version` |
-| Claude Code CLI | 已安裝並登入 | `claude --version` && `claude auth status` |
-| Claude Max 訂閱 | $200/月，需有效 | Claude CLI 登入後自動使用 |
+| Claude Code CLI | 已安裝並登入 | `claude --version` |
+| Claude Max 訂閱 | $200/月，需有效 | CLI 登入後自動使用 OAuth |
 
 ```bash
 # 安裝 Node.js（如果沒有）
@@ -60,35 +72,19 @@ echo "hello" | claude --print
 ### 方法一：一鍵安裝（推薦）
 
 ```bash
-git clone https://github.com/photofanz/openclaw-claude-proxy-v2.git
-cd openclaw-claude-proxy-v2
+git clone https://github.com/photofanz/openclaw-claude-proxy-v2.git openclaw-claude-proxy
+cd openclaw-claude-proxy
 bash install.sh
 ```
-
-腳本會自動完成：
-1. 檢查 Node.js、Claude CLI、認證狀態
-2. 安裝 npm 依賴（含 Agent SDK）
-3. 生成 `.env`（含隨機 API Key）
-4. 驗證 Agent SDK 能呼叫 Claude
-5. 建立 macOS LaunchAgent（開機自動啟動）
-6. 啟動 proxy 並確認 health OK
-
-安裝完成後會顯示你的 **API Key** 和 **OpenClaw 設定範例**。
 
 ### 方法二：手動安裝
 
 ```bash
-git clone https://github.com/photofanz/openclaw-claude-proxy-v2.git
-cd openclaw-claude-proxy-v2
-
-# 安裝依賴
+git clone https://github.com/photofanz/openclaw-claude-proxy-v2.git openclaw-claude-proxy
+cd openclaw-claude-proxy
 npm install
-
-# 建立設定
 cp .env.example .env
-# 編輯 .env，至少設定 API_KEY
-
-# 啟動
+# 編輯 .env
 node server.js
 ```
 
@@ -98,30 +94,30 @@ node server.js
 
 ```env
 PORT=3456                    # Proxy 埠號
-API_KEY=sk-openclaw-xxxxx    # 認證金鑰（install.sh 自動產生）
-CLAUDE_CLI_PATH=claude       # Claude CLI 路徑
+API_KEY=                     # 認證金鑰（留空 = 不需認證，適合本機使用）
 MAX_CONCURRENT=2             # 最大並行請求數（建議 2）
 REQUEST_TIMEOUT=300000       # 請求逾時（毫秒，預設 5 分鐘）
-MAX_RETRIES=1                # CLI 失敗自動重試次數
+MAX_RETRIES=1                # 失敗自動重試次數
 PLUGINS_DIR=./plugins        # Plugin 目錄
 ```
+
+> **注意：** v4.0 不再需要 `CLAUDE_CLI_PATH`，改用 Agent SDK 直接呼叫。
 
 ---
 
 ## API 端點
 
-### POST `/v1/messages` — Anthropic Messages API（主要端點）
+### POST `/v1/chat/completions` — OpenAI-compatible（主要端點）
 
-使用 Claude Agent SDK 後端，支援 tool_use。
+透過 persistent session 呼叫 Claude，支援 streaming。
 
 ```bash
-curl -X POST http://localhost:3456/v1/messages \
+curl -X POST http://localhost:3456/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -H "x-api-key: YOUR_API_KEY" \
   -d '{
     "model": "claude-sonnet-4-6",
-    "max_tokens": 1024,
     "messages": [
+      {"role": "system", "content": "You are a helpful assistant."},
       {"role": "user", "content": "Hello!"}
     ]
   }'
@@ -130,38 +126,25 @@ curl -X POST http://localhost:3456/v1/messages \
 回應格式：
 ```json
 {
-  "id": "msg_abc123...",
-  "type": "message",
-  "role": "assistant",
+  "id": "chatcmpl-abc123...",
+  "object": "chat.completion",
   "model": "claude-sonnet-4-6",
-  "content": [{"type": "text", "text": "Hello! ..."}],
-  "stop_reason": "end_turn",
-  "usage": {"input_tokens": 12, "output_tokens": 35}
+  "choices": [{"index": 0, "message": {"role": "assistant", "content": "Hello! ..."}, "finish_reason": "stop"}],
+  "usage": {"prompt_tokens": 12, "completion_tokens": 35, "total_tokens": 47}
 }
 ```
 
-### POST `/v1/chat/completions` — OpenAI-compatible（Legacy）
-
-使用 Claude CLI (`claude --print`) 後端，向下相容舊客戶端。支援 streaming（simulated SSE）。
-不支援 `tools` / `tool_calls`，如需 tool use 請改用 `/v1/messages`。
-
+Streaming（SSE）：
 ```bash
 curl -X POST http://localhost:3456/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_API_KEY" \
-  -d '{
-    "model": "claude-opus-4-6",
-    "messages": [
-      {"role": "system", "content": "You are a helpful assistant."},
-      {"role": "user", "content": "Hello!"}
-    ]
-  }'
+  -d '{"model": "claude-sonnet-4-6", "stream": true, "messages": [{"role": "user", "content": "Hello!"}]}'
 ```
 
 ### GET `/v1/models` — 列出可用模型
 
 ```bash
-curl http://localhost:3456/v1/models -H "x-api-key: YOUR_API_KEY"
+curl http://localhost:3456/v1/models
 ```
 
 ### GET `/health` — 健康檢查（不需認證）
@@ -170,22 +153,20 @@ curl http://localhost:3456/v1/models -H "x-api-key: YOUR_API_KEY"
 curl http://localhost:3456/health
 ```
 
+回應包含活躍 session 資訊：
+```json
+{
+  "status": "ok",
+  "version": "4.0.0",
+  "active_sessions": ["sonnet"],
+  "active_requests": 0
+}
+```
+
 ### GET `/stats` — 用量統計
 
 ```bash
-curl http://localhost:3456/stats -H "x-api-key: YOUR_API_KEY"
-```
-
-回應範例：
-```json
-{
-  "totalRequests": 142,
-  "totalTokensEstimated": 85000,
-  "errors": 2,
-  "avgResponseMs": 7200,
-  "byModel": {"claude-opus-4-6": {"count": 130, "tokens": 80000}},
-  "byEndpoint": {"messages": 100, "chat_completions": 42}
-}
+curl http://localhost:3456/stats
 ```
 
 ---
@@ -193,15 +174,17 @@ curl http://localhost:3456/stats -H "x-api-key: YOUR_API_KEY"
 ## 多模型路由
 
 ```bash
-# Opus 4.6 — 複雜推理，最強（預設）
+# Opus 4.6 — 複雜推理，最強
 "model": "claude-opus-4-6"
 
-# Sonnet 4.6 — 快速，品質好
+# Sonnet 4.6 — 快速，品質好（推薦）
 "model": "claude-sonnet-4-6"
 
 # Haiku 4.5 — 最快，輕量任務
 "model": "claude-haiku-4-5"
 ```
+
+每個 model 維護獨立的 persistent session。首次請求會建立 session，後續請求重用。
 
 ---
 
@@ -213,16 +196,8 @@ curl http://localhost:3456/stats -H "x-api-key: YOUR_API_KEY"
 module.exports = {
   name: 'my-plugin',
   description: 'What it does',
-
-  // 送出前處理（修改 messages 或 model）
-  preProcess(messages, model) {
-    return { messages, model };
-  },
-
-  // 收到回應後處理（修改回應文字）
-  postProcess(text, model) {
-    return text;
-  }
+  preProcess(messages, model) { return { messages, model }; },
+  postProcess(text, model) { return text; }
 };
 ```
 
@@ -231,49 +206,47 @@ module.exports = {
 | Plugin | 類型 | 說明 |
 |--------|------|------|
 | `language-enforcer.js` | pre | 偵測中文訊息，自動加入繁體中文回應指示 |
-| `content-filter.js` | post | 過濾回應中的 API key、token、密碼等敏感資料 |
-| `cost-tracker.js` | post | 追蹤每日省下的 API 費用，寫入 `~/.openclaw/logs/proxy-cost-savings.json` |
+| `content-filter.js` | post | 過濾回應中的 API key、token 等敏感資料 |
+| `cost-tracker.js` | post | 追蹤每日省下的 API 費用 |
 
 ---
 
 ## 連接 OpenClaw
 
-### 使用 Anthropic Messages API（推薦）
-
 編輯 `~/.openclaw/openclaw.json`，在 `models.providers` 加入：
 
 ```json
-"anthropic-claude": {
+"claude-proxy": {
   "baseUrl": "http://localhost:3456/v1",
-  "apiKey": "YOUR_API_KEY",
-  "api": "anthropic-messages",
+  "apiKey": "",
+  "api": "openai-chat",
   "models": [
     {
       "id": "claude-sonnet-4-6",
       "name": "Claude Sonnet 4.6 (proxy)",
-      "reasoning": false,
-      "input": ["text"],
+      "reasoning": true,
+      "input": ["text", "image"],
       "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
       "contextWindow": 200000,
-      "maxTokens": 8192
-    },
-    {
-      "id": "claude-haiku-4-5",
-      "name": "Claude Haiku 4.5 (proxy)",
-      "reasoning": false,
-      "input": ["text"],
-      "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
-      "contextWindow": 200000,
-      "maxTokens": 8192
+      "maxTokens": 16384
     },
     {
       "id": "claude-opus-4-6",
       "name": "Claude Opus 4.6 (proxy)",
       "reasoning": true,
-      "input": ["text"],
+      "input": ["text", "image"],
       "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
       "contextWindow": 200000,
       "maxTokens": 16384
+    },
+    {
+      "id": "claude-haiku-4-5",
+      "name": "Claude Haiku 4.5 (proxy)",
+      "reasoning": false,
+      "input": ["text", "image"],
+      "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
+      "contextWindow": 200000,
+      "maxTokens": 8192
     }
   ]
 }
@@ -285,23 +258,38 @@ module.exports = {
 "agents": {
   "defaults": {
     "model": {
-      "primary": "anthropic-claude/claude-sonnet-4-6"
+      "primary": "claude-proxy/claude-sonnet-4-6"
     }
   }
 }
 ```
 
-### 使用 OpenAI-compatible API（Legacy）
+## 連接 Hermes
 
-```json
-"claude-proxy": {
-  "baseUrl": "http://localhost:3456/v1",
-  "apiKey": "YOUR_API_KEY",
-  "api": "openai-completions",
-  "models": [
-    {"id": "claude-opus-4-6", "name": "Claude Opus 4.6 (proxy)"}
-  ]
-}
+編輯 `~/.hermes/config.yaml`：
+
+```yaml
+model:
+  default: claude-sonnet-4-6
+  provider: claude-proxy
+  base_url: http://localhost:3456/v1
+
+custom_providers:
+- name: claude-proxy
+  base_url: http://localhost:3456/v1
+  api_key: ''
+  api_mode: chat_completions
+  model: claude-opus-4-6
+- name: claude-proxy
+  base_url: http://localhost:3456/v1
+  api_key: ''
+  api_mode: chat_completions
+  model: claude-sonnet-4-6
+- name: claude-proxy
+  base_url: http://localhost:3456/v1
+  api_key: ''
+  api_mode: chat_completions
+  model: claude-haiku-4-5
 ```
 
 ---
@@ -310,29 +298,29 @@ module.exports = {
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│  Agent Fleet (OpenClaw / LangChain / custom)                  │
+│  Agent Fleet (OpenClaw / Hermes / LangChain / custom)         │
 │                                                                │
 │  Agent 1 ──┐                                                  │
 │  Agent 2 ──┼── HTTP Request ──┐                               │
 │  Agent 3 ──┘                  │                               │
 │                                ▼                               │
 │  ┌──────────────────────────────────────────────────────┐     │
-│  │  Claude Code Proxy v3.0 (localhost:3456)              │     │
+│  │  Claude Code Proxy v4.0 (localhost:3456)              │     │
 │  │                                                       │     │
 │  │  Plugins:  [pre]  → language-enforcer                 │     │
 │  │            [post] → content-filter, cost-tracker       │     │
 │  │                                                       │     │
-│  │  ┌─────────────────┬──────────────────────┐           │     │
-│  │  │ /v1/messages    │ /v1/chat/completions │           │     │
-│  │  │ Agent SDK       │ CLI (claude --print) │           │     │
-│  │  │ 支援 tool_use   │ 無 tool_calls，有 stream │           │     │
-│  │  └────────┬────────┴──────────┬───────────┘           │     │
-│  │           │                   │                        │     │
+│  │  ┌──────────────────────────────────────────┐         │     │
+│  │  │ /v1/chat/completions (OpenAI-compatible) │         │     │
+│  │  │ SDK persistent session (per model)       │         │     │
+│  │  │ Session 重用 + prompt cache              │         │     │
+│  │  └────────────────────┬─────────────────────┘         │     │
+│  │                       │                                │     │
 │  │  Queue: MAX_CONCURRENT=2, rate limit, auto-retry       │     │
 │  │  Stats: GET /stats, GET /health                        │     │
-│  └───────────┼───────────────────┼────────────────────────┘     │
-│              │                   │                               │
-│              ▼                   ▼                               │
+│  └───────────────────────┼────────────────────────────────┘     │
+│                          │                                       │
+│                          ▼                                       │
 │  ┌──────────────────────────────────────────────────────┐     │
 │  │  Claude Max Subscription (OAuth)                      │     │
 │  │  Opus 4.6 · Sonnet 4.6 · Haiku 4.5                  │     │
@@ -363,17 +351,11 @@ curl -s http://localhost:3456/health | python3 -m json.tool
 tail -f ~/.openclaw/logs/claude-proxy.log
 
 # 重啟 Proxy
-launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.openclaw.claude-proxy.plist
-sleep 2
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.openclaw.claude-proxy.plist
+launchctl unload ~/Library/LaunchAgents/com.openclaw.claude-proxy.plist
+launchctl load ~/Library/LaunchAgents/com.openclaw.claude-proxy.plist
 
 # 停止 Proxy
-launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.openclaw.claude-proxy.plist
-
-# 更新
-cd ~/openclaw-claude-proxy-v2
-git pull && npm install
-# 然後重啟（同上）
+launchctl unload ~/Library/LaunchAgents/com.openclaw.claude-proxy.plist
 ```
 
 ---
@@ -382,11 +364,29 @@ git pull && npm install
 
 | 症狀 | 原因 | 解法 |
 |------|------|------|
-| `health` 無回應 | Proxy 沒在跑 | `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.openclaw.claude-proxy.plist` |
-| `401 authentication_error` | API Key 不對 | 確認 OpenClaw config 的 `apiKey` 與 proxy `.env` 的 `API_KEY` 一致 |
+| `health` 無回應 | Proxy 沒在跑 | `launchctl load ~/Library/LaunchAgents/com.openclaw.claude-proxy.plist` |
 | 回應很慢（>30 秒） | 大 prompt 或 Claude 限速 | 正常現象；確認 `MAX_CONCURRENT=2` |
-| `No response from Claude` | Claude CLI 未登入 | 執行 `claude auth login` 重新登入 |
-| 頻繁 `exit code 1` | Claude Max rate limit | 降低 `MAX_CONCURRENT` 為 1 |
+| `extra usage` 錯誤 | Claude 帳號月額度用盡 | 等月初重置或購買額度 |
+| Session 建立失敗 | Claude CLI 未登入 | 執行 `claude auth login` 重新登入 |
+| 頻繁 session 重建 | 網路不穩 | 檢查 log，確認 OAuth 有效 |
+
+---
+
+## 從 v3.0 升級
+
+```bash
+cd ~/openclaw-claude-proxy
+git pull
+npm install
+
+# 更新 .env：移除 CLAUDE_CLI_PATH（不再需要）
+# 更新 OpenClaw config：api 從 "anthropic-messages" 改為 "openai-chat"
+# 更新 Hermes config：api_mode 從 "anthropic_messages" 改為 "chat_completions"
+
+# 重啟
+launchctl unload ~/Library/LaunchAgents/com.openclaw.claude-proxy.plist
+launchctl load ~/Library/LaunchAgents/com.openclaw.claude-proxy.plist
+```
 
 ---
 
