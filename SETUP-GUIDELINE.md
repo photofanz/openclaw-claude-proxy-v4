@@ -1,8 +1,8 @@
-# Hermes Agent + Claude Proxy v4.0 遠端部署指南
+# Hermes Agent + Claude Proxy v5.0 遠端部署指南
 
-> 目標：透過 SSH 在新的 Mac Mini 上安裝 Hermes Agent + Claude Proxy v4.0
-> v4.0 使用 persistent session 架構，內建 WebSearch/Bash 等工具支援
-> 同時相容 OpenClaw（可選配）
+> 目標：透過 SSH 在新的 Mac Mini 上安裝 Hermes Agent + Claude Proxy v5.0
+> v5.0 採 stateless 架構（每請求獨立、無污染），內建 WebSearch/Bash 等工具支援
+> 同時相容 OpenClaw（建議另 fork 一份獨立 proxy 跑不同 port）
 > 工具：Claude Code 的 `openclaw-install` 技能 + 手動微調
 
 ---
@@ -23,7 +23,7 @@
 
 ```bash
 # 打包檔
-ls -lh ~/openclaw-claude-proxy-v4.0-deploy.tar.gz
+ls -lh ~/hermes-claude-proxy-v5.0-deploy.tar.gz
 
 # 或直接用 GitHub
 # https://github.com/photofanz/openclaw-claude-proxy-v4
@@ -88,29 +88,29 @@ echo "hello" | claude --print
 
 ---
 
-## Phase 3：安裝 openclaw-claude-proxy-v4（SSH 進去）
+## Phase 3：安裝 hermes-claude-proxy-v5（SSH 進去）
 
 ```bash
 # 3-1. 傳檔案到 Mac Mini
-scp ~/openclaw-claude-proxy-v4.0-deploy.tar.gz user@<MAC_MINI_IP>:~/
+scp ~/hermes-claude-proxy-v5.0-deploy.tar.gz user@<MAC_MINI_IP>:~/
 
 # 3-2. SSH 進去
 ssh user@<MAC_MINI_IP>
 
 # 3-3. 解壓安裝
-mkdir -p ~/openclaw-claude-proxy && cd ~/openclaw-claude-proxy
-tar xzf ~/openclaw-claude-proxy-v4.0-deploy.tar.gz
+mkdir -p ~/hermes-claude-proxy && cd ~/hermes-claude-proxy
+tar xzf ~/hermes-claude-proxy-v5.0-deploy.tar.gz
 bash install.sh
 
 # install.sh 會自動：
 # ✅ 檢查 Node.js、Claude CLI、認證
 # ✅ npm install（含 Agent SDK）
-# ✅ 產生 .env + 隨機 API Key
+# ✅ 產生 .env（含 STATELESS_MODE=1 預設）
 # ✅ 測試 Agent SDK
-# ✅ 建立 LaunchAgent（開機自動啟動）
-# ✅ 健康檢查
+# ✅ 建立 LaunchAgent com.hermes.claude-proxy（開機自動啟動）
+# ✅ 健康檢查（mode: stateless）
 
-# 3-4. 記下顯示的 API Key（sk-openclaw-xxx）
+# 3-4. 如有設定 API_KEY，記下；否則本機預設無 auth
 ```
 
 ---
@@ -120,7 +120,7 @@ bash install.sh
 > 以下同時提供 Hermes Agent 和 OpenClaw 的設定方式。Hermes 是主要開發對象，OpenClaw 為相容選項。
 
 ```bash
-# 4-1a. 設定 OpenClaw claude-proxy provider（v4.0 使用 openai-completions 格式，不需要 API Key）
+# 4-1a. 設定 OpenClaw claude-proxy provider（v4.0 起使用 openai-completions 格式，不需要 API Key）
 openclaw config set 'models.providers.claude-proxy' --json '{
   "baseUrl": "http://localhost:3456/v1",
   "apiKey": "",
@@ -245,7 +245,7 @@ openclaw gateway status
 
 | 症狀 | 檢查 | 解法 |
 |------|------|------|
-| Proxy health 無回應 | `lsof -i :3456` | 重啟：`launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.openclaw.claude-proxy.plist && sleep 2 && launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.openclaw.claude-proxy.plist` |
+| Proxy health 無回應 | `lsof -i :3456` | 重啟：`launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.hermes.claude-proxy.plist && sleep 2 && launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.hermes.claude-proxy.plist` |
 | Bot 不回應 | `openclaw gateway status` | `openclaw gateway stop && openclaw gateway start` |
 | 回應說不能讀圖 | 檢查 model config 的 input | 確認有 `["text", "image"]` |
 | WebSearch/工具被擋 | session 沒有工具權限 | 確認 server.js 的 `allowedTools` 設定，重啟 proxy |
@@ -268,7 +268,7 @@ Hermes Gateway                    ← LaunchAgent: ai.hermes.gateway
   │  (或 OpenClaw Gateway          ← LaunchAgent: ai.openclaw.gateway)
   │
   ▼
-Claude Proxy v4.0 (port 3456)    ← LaunchAgent: com.openclaw.claude-proxy
+Claude Proxy v5.0 (port 3456)    ← LaunchAgent: com.hermes.claude-proxy
   │  Persistent session + 工具支援
   │
   ▼

@@ -1,7 +1,7 @@
 {
-  "name": "openclaw-claude-proxy",
-  "version": "4.0.0",
-  "description": "OpenClaw Claude Code Proxy v4 \u2014 Persistent Session Edition, OpenAI-compatible endpoint via Agent SDK",
+  "name": "hermes-claude-proxy",
+  "version": "5.0.0",
+  "description": "Hermes Claude Code Proxy v5 \u2014 Stateless Edition, OpenAI-compatible endpoint via Agent SDK",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

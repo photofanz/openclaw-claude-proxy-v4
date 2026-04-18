@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 // ═══════════════════════════════════════════════════════════════════════════
-// OpenClaw ↔ Claude Code Proxy v4.0
+// Hermes ↔ Claude Code Proxy v5.0
 //
-// 使用 Claude Agent SDK persistent session，大幅降低 token 消耗。
-// 每個 model 維護一個長期 session，system prompt 只載入一次。
+// 使用 Claude Agent SDK stateless query，每個請求獨立執行、不累積歷史、
+// 不跨 client 污染。靠 Anthropic 原生 prompt caching（5 分鐘 TTL）
+// 降低 system prompt 重複載入成本。
+// 舊 persistent session 實作保留，可透過 STATELESS_MODE=0 切回。
 //
 // Endpoints:
 //   POST /v1/chat/completions  — OpenAI-compatible
@@ -29,6 +31,7 @@ const MAX_CONCURRENT = parseInt(process.env.MAX_CONCURRENT || '2', 10);
 const REQUEST_TIMEOUT = parseInt(process.env.REQUEST_TIMEOUT || '300000', 10);
 const MAX_RETRIES = parseInt(process.env.MAX_RETRIES || '1', 10);
 const PLUGINS_DIR = process.env.PLUGINS_DIR || path.join(__dirname, 'plugins');
+const STATELESS_MODE = process.env.STATELESS_MODE === '1';
 
 let activeRequests = 0;
 let lastRequestTime = 0;
@@ -93,6 +96,24 @@ async function sendToSession(model, userMessage) {
   });
 
   return resultPromise;
+}
+
+// Stateless 版本：每個請求開新 prompt，結束即釋放。不累積歷史、無跨請求狀態
+async function sendStateless(model, userMessage) {
+  const sdkModel = resolveModel(model);
+  const { unstable_v2_prompt } = getSDK();
+  const result = await unstable_v2_prompt(userMessage, {
+    model: sdkModel,
+    allowedTools: [
+      'WebSearch', 'WebFetch', 'Read', 'Grep', 'Glob',
+      'Bash(*)', 'Write', 'Edit',
+    ],
+  });
+  if (result.is_error || result.subtype !== 'success') {
+    const msg = (result.errors && result.errors.join('; ')) || `LLM error: ${result.subtype}`;
+    throw new Error(msg);
+  }
+  return result.result || '';
 }
 
 // ---------------------------------------------------------------------------
@@ -282,7 +303,7 @@ app.post('/v1/chat/completions', auth, async (req, res) => {
     let lastError = null;
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
-        result = await sendToSession(model, prompt);
+        result = await (STATELESS_MODE ? sendStateless : sendToSession)(model, prompt);
         break;
       } catch (err) {
         lastError = err;
@@ -364,10 +385,11 @@ app.get('/v1/models', auth, (req, res) => {
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
-    version: '4.0.0',
+    version: '5.0.0',
+    mode: STATELESS_MODE ? 'stateless' : 'session',
     active_requests: activeRequests,
     max_concurrent: MAX_CONCURRENT,
-    active_sessions: Object.keys(sessions),
+    active_sessions: STATELESS_MODE ? 'stateless' : Object.keys(sessions),
     uptime_seconds: Math.floor(process.uptime()),
   });
 });
@@ -380,8 +402,9 @@ app.get('/stats', auth, (req, res) => {
     ...stats,
     _responseTimes: undefined,
     uptime_hours: Math.round(process.uptime() / 3600 * 10) / 10,
+    mode: STATELESS_MODE ? 'stateless' : 'session',
     active_requests: activeRequests,
-    active_sessions: Object.keys(sessions),
+    active_sessions: STATELESS_MODE ? 'stateless' : Object.keys(sessions),
     estimated_cost_saved: `$${(stats.totalTokensEstimated * 0.000015).toFixed(2)} (vs API pricing)`,
   });
 });
@@ -394,11 +417,12 @@ loadPlugins();
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`
 ╔════════════════════════════════════════════════════╗
-║  OpenClaw ↔ Claude Code Proxy v4.0                ║
-║  Persistent Session Edition                       ║
+║  Hermes ↔ Claude Code Proxy v5.0                  ║
+║  Stateless Edition                                ║
 ╠════════════════════════════════════════════════════╣
 ║  Port: ${String(PORT).padEnd(42)}║
 ║  Auth: ${(API_KEY ? 'Enabled' : 'Disabled (set API_KEY)').padEnd(42)}║
+║  Mode: ${(STATELESS_MODE ? 'Stateless (per-request)' : 'Session (legacy)').padEnd(42)}║
 ║  Concurrent: ${String(MAX_CONCURRENT).padEnd(36)}║
 ║  Retries: ${String(MAX_RETRIES).padEnd(39)}║
 ║  Plugins: ${String(plugins.length).padEnd(39)}║

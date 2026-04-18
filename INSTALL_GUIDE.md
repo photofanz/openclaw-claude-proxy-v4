@@ -1,7 +1,8 @@
-# Hermes Agent Claude Proxy v4.0 — 安裝指南
+# Hermes Agent Claude Proxy v5.0 — 安裝指南
 
 > 把 Claude Max 訂閱（$200/月）變成免費 API，供 Hermes Agent 使用（同時相容 OpenClaw）。
-> v4.0 使用 persistent session 架構，大幅降低 token 消耗，並內建工具支援（WebSearch、Bash 等）。
+> v5.0 採 stateless 架構，每個請求獨立執行、不累積歷史、不跨 client 污染，
+> 靠 Anthropic 原生 prompt caching 控制成本，內建工具支援（WebSearch、Bash 等）。
 > 適用環境：macOS（launchd 自動啟動）
 
 ---
@@ -34,9 +35,13 @@ claude auth login
 
 ```bash
 cd ~
-git clone https://github.com/photofanz/openclaw-claude-proxy-v4.git
-cd openclaw-claude-proxy
+git clone https://github.com/photofanz/openclaw-claude-proxy-v4.git hermes-claude-proxy
+cd hermes-claude-proxy
 ```
+
+> 若你同時要服務 OpenClaw，建議再 fork 一份獨立 proxy（例如 `openclaw-claude-proxy/`），
+> 跑在不同 port（例如 3457）。v5 雖然已靠 stateless 排除跨 client 污染，但獨立 process
+> 仍是最乾淨的隔離方案（獨立 log、獨立 stats、獨立 API_KEY）。
 
 ---
 
@@ -49,14 +54,14 @@ bash install.sh
 腳本會自動完成：
 1. ✅ 檢查 Node.js、Claude CLI、登入狀態
 2. ✅ 安裝 npm 依賴（含 Agent SDK）
-3. ✅ 生成 `.env`（含隨機 API Key）
+3. ✅ 生成 `.env`（含 `STATELESS_MODE=1` 預設開啟）
 4. ✅ 驗證 Agent SDK 能呼叫 Claude
-5. ✅ 建立 LaunchAgent（開機自動啟動）
-6. ✅ 啟動 proxy 並確認 health OK
+5. ✅ 建立 LaunchAgent `com.hermes.claude-proxy`（開機自動啟動）
+6. ✅ 啟動 proxy 並確認 health OK（`mode: stateless`）
 
 安裝完成後，螢幕會顯示：
-- **API Key**（`sk-openclaw-...`）— 記下來，下一步要用
-- **OpenClaw provider 設定**（JSON）— 複製備用
+- **API Key**（若有設定）— 記下來，下一步要用
+- **Hermes / OpenClaw provider 設定**（JSON / YAML）— 複製備用
 
 ---
 
@@ -167,7 +172,7 @@ launchctl load ~/Library/LaunchAgents/ai.hermes.gateway.plist
 }
 ```
 
-> **注意：** v4.0 使用 OpenAI `/v1/chat/completions` 端點，OpenClaw 側的 `api` 值必須填 `openai-completions`（OpenClaw schema 的命名，並非 `openai-chat`），且不需要 API Key。
+> **注意：** v4.0 起使用 OpenAI `/v1/chat/completions` 端點，OpenClaw 側的 `api` 值必須填 `openai-completions`（OpenClaw schema 的命名，並非 `openai-chat`），且不需要 API Key。
 
 設定 primary model：
 
@@ -208,33 +213,33 @@ curl -s http://localhost:3456/health | python3 -m json.tool
 curl -s http://localhost:3456/stats -H "x-api-key: 你的API_KEY" | python3 -m json.tool
 
 # 日誌
-tail -f ~/.openclaw/logs/claude-proxy.log
+tail -f ~/.hermes/logs/claude-proxy.log
 ```
 
 ### 重啟 Proxy
 
 ```bash
-launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.openclaw.claude-proxy.plist
+launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.hermes.claude-proxy.plist
 sleep 2
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.openclaw.claude-proxy.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.hermes.claude-proxy.plist
 ```
 
 ### 停止 Proxy
 
 ```bash
-launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.openclaw.claude-proxy.plist
+launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.hermes.claude-proxy.plist
 ```
 
 ### 更新 Proxy
 
 ```bash
-cd ~/openclaw-claude-proxy
+cd ~/hermes-claude-proxy
 git pull
 npm install
 # 重啟
-launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.openclaw.claude-proxy.plist
+launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.hermes.claude-proxy.plist
 sleep 2
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.openclaw.claude-proxy.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.hermes.claude-proxy.plist
 ```
 
 ---
@@ -243,16 +248,16 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.openclaw.claude-prox
 
 | Method | Path | 說明 |
 |--------|------|------|
-| POST | `/v1/chat/completions` | OpenAI-compatible（persistent session backend） |
+| POST | `/v1/chat/completions` | OpenAI-compatible（stateless per request） |
 | GET | `/v1/models` | 列出可用模型 |
-| GET | `/health` | 健康檢查（含活躍 session 資訊） |
+| GET | `/health` | 健康檢查（含運行模式 `mode`） |
 | GET | `/stats` | 用量統計 |
 
 ---
 
 ## 內建工具
 
-v4.0 的 persistent session 預設開放以下工具：
+v5.0 每次 stateless query 預設開放以下工具：
 
 | 工具 | 說明 |
 |------|------|
@@ -271,31 +276,32 @@ v4.0 的 persistent session 預設開放以下工具：
 
 | 症狀 | 原因 | 解法 |
 |------|------|------|
-| `health` 無回應 | Proxy 沒在跑 | `launchctl load ~/Library/LaunchAgents/com.openclaw.claude-proxy.plist` |
-| 回應很慢（>30 秒） | 大 prompt 或 Claude 限速 | 正常現象；確認 `MAX_CONCURRENT=2` |
-| `extra usage` 錯誤 | Claude 帳號月額度用盡 | 等月初重置或購買額度 |
-| WebSearch/工具被擋 | session 沒有工具權限 | 確認 `allowedTools` 設定正確，重啟 proxy |
-| Session 建立失敗 | Claude CLI 未登入 | 執行 `claude auth login` 重新登入 |
+| `health` 無回應 | Proxy 沒在跑 | `launchctl load ~/Library/LaunchAgents/com.hermes.claude-proxy.plist` |
+| 每次請求冷啟動 2-3 秒 | stateless 每次重啟 subprocess（符合預期） | 依賴 prompt caching 降低成本，非 bug |
+| `extra usage` / 429 usage limit | Claude 帳號額度用盡 | 到 https://claude.ai/settings/usage 儲值或等週期重置 |
+| WebSearch/工具被擋 | 工具權限未開 | 確認 server.js 的 `allowedTools` 清單，重啟 proxy |
+| SDK 呼叫失敗 | Claude CLI 未登入 | 執行 `claude auth login` 重新登入 |
 
 ---
 
 ## 架構說明
 
 ```
-OpenClaw / Hermes Gateway
+Hermes Gateway（或其他 client）
   │
   ▼
 Proxy (localhost:3456)
   │
   └─ POST /v1/chat/completions
-       └→ SDK persistent session (per model)
+       └→ SDK stateless query (per request)
             └→ Claude Max OAuth (自動認證)
-                 └→ Anthropic API
+                 └→ Anthropic API（含 prompt caching）
                       └→ 內建工具：WebSearch, Bash, Read/Write...
 ```
 
-- **Persistent session** 每個 model 維護一個長期 session，system prompt 只載入一次
+- **Stateless 架構** 每個請求開新 query、用完即釋放，server 端無任何對話狀態
+- **Prompt caching** 靠 Anthropic 原生 5 分鐘 TTL 快取，system prompt 重複使用時成本降至 10%
 - **OAuth 認證** 使用 Claude Code CLI 的登入狀態，不需要 Anthropic API Key
 - **內建工具** WebSearch、Bash、Read/Write 等，在 `allowedTools` 中設定
 - **cost 設為 0** 因為走的是 Claude Max 訂閱，不計 API 費用
-- **雙平台相容** Hermes Agent（`chat_completions`）和 OpenClaw（`openai-completions`）使用同一個 proxy
+- **雙平台相容** Hermes Agent（`chat_completions`）和 OpenClaw（`openai-completions`）皆可直接連接；如要完全隔離建議各自 fork 獨立 proxy

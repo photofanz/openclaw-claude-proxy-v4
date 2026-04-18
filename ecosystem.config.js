@@ -12,7 +12,7 @@ const dotenv = require('fs').existsSync('.env')
 
 module.exports = {
   apps: [{
-    name: 'openclaw-claude-proxy',
+    name: 'hermes-claude-proxy',
     script: 'server.js',
     instances: 1,
     autorestart: true,

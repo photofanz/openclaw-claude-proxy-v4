@@ -1,17 +1,21 @@
-# Hermes Agent ↔ Claude Code Proxy v4.0
+# Hermes Agent ↔ Claude Code Proxy v5.0
 
 > 把 Claude Max 訂閱（$200/月）變成免費 API，供 Hermes Agent 及其他 AI agent 使用。
 > 同時相容 OpenClaw。
 
-**Persistent Session 架構，大幅降低 token 消耗，內建 WebSearch 等工具。**
+**Stateless 架構，每請求獨立無污染，靠 prompt caching 控制成本，內建 WebSearch 等工具。**
 
 ```
 Hermes / OpenClaw / 其他 Agent    Proxy (localhost:3456)            Claude Max
   │                                │                                │
-  ├─ POST /v1/chat/completions ──►│── SDK persistent session ─────►│ Opus/Sonnet/Haiku
-  │  (OpenAI-compatible)          │   (session 重用，prompt cache)  │
+  ├─ POST /v1/chat/completions ──►│── SDK stateless query ────────►│ Opus/Sonnet/Haiku
+  │  (OpenAI-compatible)          │   (每次獨立 + prompt caching)   │
   └─ GET /health, /stats ────────►│                                │
 ```
+
+> **多 client 同時接入？** 建議每個 client 各跑一個獨立的 proxy fork（例如 Hermes 3456、
+> OpenClaw 3457），完全避免跨服務互相干擾。v5 本身已靠 stateless 排除大部分風險，但
+> 獨立 process 是最乾淨的隔離方案。
 
 ---
 
@@ -27,7 +31,25 @@ Hermes / OpenClaw / 其他 Agent    Proxy (localhost:3456)            Claude Max
 
 ---
 
-## v4.0 重大變更
+## v5.0 重大變更
+
+| 項目 | v4.0 | v5.0 |
+|------|------|------|
+| 後端 | SDK persistent session（重用 session） | SDK stateless query（每次獨立、用完即釋放） |
+| 跨 client 污染 | **有**（多 client 共用 session 會互相干擾、洩漏對話歷史） | **無**（每次請求隔離，無共享狀態） |
+| 歷史累積 | session 內累積 O(N²) token 膨脹，長跑會爆 context | 歷史由 client 控制，O(N) 線性、可預測 |
+| OpenAI API 語義 | 違反（stateless 呼叫被塞進 stateful session） | 符合（真正 stateless） |
+| Token 成本 | session 節省 system prompt 首次載入 | 靠 Anthropic prompt caching（5 min TTL、90% 折扣）補償 |
+| `/new` 重置行為 | 無效（proxy 端仍保留歷史） | **自動生效**（bot 端清歷史＝乾淨重啟） |
+| 回溯相容 | — | `STATELESS_MODE=0` 可切回舊 session 模式 |
+
+### v4.0 → v5.0 的動機
+
+v4 的 persistent session 節省了 system prompt 重複載入，代價是**跨 client/跨請求的 session 污染**：多個 bot（Hermes + OpenClaw）共用同 model 時會看到彼此的對話歷史；單 client 多輪時 session 會累積冗餘歷史（O(N²)），加速耗盡 Claude Max 額度。v5 的 stateless 架構徹底解決這兩個問題，Anthropic 原生的 prompt caching 替代了 v4 的自製 session 快取。
+
+---
+
+## v4.0 重大變更（歷史）
 
 | 項目 | v3.0 | v4.0 |
 |------|------|------|
@@ -35,7 +57,7 @@ Hermes / OpenClaw / 其他 Agent    Proxy (localhost:3456)            Claude Max
 | Token 消耗 | 高（每次載入 ~8K CLI system prompt） | 低（system prompt 只載入一次，靠 cache） |
 | 端點 | `/v1/messages` + `/v1/chat/completions` | 統一 `/v1/chat/completions` |
 | API 格式 | Anthropic + OpenAI | 統一 OpenAI-compatible |
-| Extra usage 問題 | 大 system prompt 容易觸發 | 解決（persistent session 不重複載入） |
+| Extra usage 問題 | 大 system prompt 容易觸發 | 部分緩解（session 不重複載入，但有污染副作用） |
 | 工具支援 | 無（純文字回覆） | 內建 WebSearch、Bash、Read/Write 等工具 |
 
 ---
@@ -44,14 +66,15 @@ Hermes / OpenClaw / 其他 Agent    Proxy (localhost:3456)            Claude Max
 
 | 功能 | 說明 |
 |------|------|
-| Persistent Session | 每個 model 維護長期 session，system prompt 只載入一次 |
+| Stateless 架構 | 每個請求開新 query、用完即釋放，無跨請求狀態、無跨 client 污染 |
+| Prompt Caching | 靠 Anthropic 原生 5 分鐘 TTL 快取，system prompt 反覆使用時成本降至 10% |
 | 內建工具支援 | WebSearch、WebFetch、Bash、Read、Write、Edit、Grep、Glob |
 | OpenAI-compatible API | `/v1/chat/completions` — 相容 Hermes、OpenClaw 及所有 OpenAI 客戶端 |
 | 多模型路由 | Opus 4.7 / Sonnet 4.6 / Haiku 4.5，透過 `model` 參數切換 |
-| Session 自動重建 | session 異常時自動清除並重建 |
-| 請求序列化 | 同一 model 的請求自動排隊，避免並行衝突 |
+| `STATELESS_MODE` 開關 | 環境變數 `=1`（預設）走 stateless；`=0` 退回舊 persistent session |
+| 並行處理 | 最多 `MAX_CONCURRENT` 個請求同時執行（無 session 序列化限制） |
 | Plugin 系統 | pre/post 處理 hooks，放 `.js` 到 `plugins/` 即生效 |
-| 用量統計 | `GET /stats` — 請求數、token 估算、活躍 session |
+| 用量統計 | `GET /stats` — 請求數、token 估算、運行模式 |
 | 自動重試 | 失敗時自動重試（`MAX_RETRIES`） |
 | Streaming | 支援 simulated SSE streaming |
 
@@ -87,16 +110,16 @@ echo "hello" | claude --print
 ### 方法一：一鍵安裝（推薦）
 
 ```bash
-git clone https://github.com/photofanz/openclaw-claude-proxy-v4.git openclaw-claude-proxy
-cd openclaw-claude-proxy
+git clone https://github.com/photofanz/openclaw-claude-proxy-v4.git hermes-claude-proxy
+cd hermes-claude-proxy
 bash install.sh
 ```
 
 ### 方法二：手動安裝
 
 ```bash
-git clone https://github.com/photofanz/openclaw-claude-proxy-v4.git openclaw-claude-proxy
-cd openclaw-claude-proxy
+git clone https://github.com/photofanz/openclaw-claude-proxy-v4.git hermes-claude-proxy
+cd hermes-claude-proxy
 npm install
 cp .env.example .env
 # 編輯 .env
@@ -114,9 +137,11 @@ MAX_CONCURRENT=2             # 最大並行請求數（建議 2）
 REQUEST_TIMEOUT=300000       # 請求逾時（毫秒，預設 5 分鐘）
 MAX_RETRIES=1                # 失敗自動重試次數
 PLUGINS_DIR=./plugins        # Plugin 目錄
+STATELESS_MODE=1             # 1=stateless（v5 預設、無污染）；0=legacy persistent session
 ```
 
-> **注意：** v4.0 不再需要 `CLAUDE_CLI_PATH`，改用 Agent SDK 直接呼叫。
+> **注意：** v4.0 起不再需要 `CLAUDE_CLI_PATH`，改用 Agent SDK 直接呼叫。
+> **v5 改動：** `STATELESS_MODE=1` 為預設。除非你有特殊理由需要舊 session 行為（例如想保留 server 端對話記憶），否則保持預設即可。
 
 ---
 
@@ -124,7 +149,7 @@ PLUGINS_DIR=./plugins        # Plugin 目錄
 
 ### POST `/v1/chat/completions` — OpenAI-compatible（主要端點）
 
-透過 persistent session 呼叫 Claude，支援 streaming。
+每個請求以 stateless query 呼叫 Claude，支援 streaming。
 
 ```bash
 curl -X POST http://localhost:3456/v1/chat/completions \
@@ -168,13 +193,16 @@ curl http://localhost:3456/v1/models
 curl http://localhost:3456/health
 ```
 
-回應包含活躍 session 資訊：
+回應包含運行模式：
 ```json
 {
   "status": "ok",
-  "version": "4.0.0",
-  "active_sessions": ["sonnet"],
-  "active_requests": 0
+  "version": "5.0.0",
+  "mode": "stateless",
+  "active_sessions": "stateless",
+  "active_requests": 0,
+  "max_concurrent": 2,
+  "uptime_seconds": 123
 }
 ```
 
@@ -199,13 +227,13 @@ curl http://localhost:3456/stats
 "model": "claude-haiku-4-5"
 ```
 
-每個 model 維護獨立的 persistent session。首次請求會建立 session，後續請求重用。
+每個請求走獨立的 stateless query，model 只透過參數指定、無 server 端 session 綁定。
 
 ---
 
 ## 內建工具
 
-Persistent session 預設開放以下 Claude Code 工具：
+每次 stateless query 預設開放以下 Claude Code 工具：
 
 | 工具 | 說明 |
 |------|------|
@@ -359,19 +387,19 @@ launchctl load ~/Library/LaunchAgents/ai.openclaw.gateway.plist
 │  Custom ───┘                  │                               │
 │                                ▼                               │
 │  ┌──────────────────────────────────────────────────────┐     │
-│  │  Claude Code Proxy v4.0 (localhost:3456)              │     │
+│  │  Claude Code Proxy v5.0 (localhost:3456)              │     │
 │  │                                                       │     │
 │  │  Plugins:  [pre]  → language-enforcer                 │     │
 │  │            [post] → content-filter, cost-tracker       │     │
 │  │                                                       │     │
 │  │  ┌──────────────────────────────────────────┐         │     │
 │  │  │ /v1/chat/completions (OpenAI-compatible) │         │     │
-│  │  │ SDK persistent session (per model)       │         │     │
-│  │  │ Session 重用 + prompt cache              │         │     │
+│  │  │ SDK stateless query (per request)        │         │     │
+│  │  │ Anthropic prompt caching (5 min TTL)     │         │     │
 │  │  │ 工具：WebSearch, Bash, Read/Write...     │         │     │
 │  │  └────────────────────┬─────────────────────┘         │     │
 │  │                       │                                │     │
-│  │  Queue: MAX_CONCURRENT=2, rate limit, auto-retry       │     │
+│  │  Concurrency: MAX_CONCURRENT=2, rate limit, auto-retry │     │
 │  │  Stats: GET /stats, GET /health                        │     │
 │  └───────────────────────┼────────────────────────────────┘     │
 │                          │                                       │
@@ -403,14 +431,14 @@ launchctl load ~/Library/LaunchAgents/ai.openclaw.gateway.plist
 curl -s http://localhost:3456/health | python3 -m json.tool
 
 # 查看日誌
-tail -f ~/.openclaw/logs/claude-proxy.log
+tail -f ~/.hermes/logs/claude-proxy.log
 
 # 重啟 Proxy
-launchctl unload ~/Library/LaunchAgents/com.openclaw.claude-proxy.plist
-launchctl load ~/Library/LaunchAgents/com.openclaw.claude-proxy.plist
+launchctl unload ~/Library/LaunchAgents/com.hermes.claude-proxy.plist
+launchctl load ~/Library/LaunchAgents/com.hermes.claude-proxy.plist
 
 # 停止 Proxy
-launchctl unload ~/Library/LaunchAgents/com.openclaw.claude-proxy.plist
+launchctl unload ~/Library/LaunchAgents/com.hermes.claude-proxy.plist
 ```
 
 ---
@@ -419,29 +447,51 @@ launchctl unload ~/Library/LaunchAgents/com.openclaw.claude-proxy.plist
 
 | 症狀 | 原因 | 解法 |
 |------|------|------|
-| `health` 無回應 | Proxy 沒在跑 | `launchctl load ~/Library/LaunchAgents/com.openclaw.claude-proxy.plist` |
-| 回應很慢（>30 秒） | 大 prompt 或 Claude 限速 | 正常現象；確認 `MAX_CONCURRENT=2` |
-| `extra usage` 錯誤 | Claude 帳號月額度用盡 | 等月初重置或購買額度 |
-| WebSearch/工具被擋 | session 沒有工具權限 | 確認 `allowedTools` 設定正確，重啟 proxy |
-| Session 建立失敗 | Claude CLI 未登入 | 執行 `claude auth login` 重新登入 |
-| 頻繁 session 重建 | 網路不穩 | 檢查 log，確認 OAuth 有效 |
+| `health` 無回應 | Proxy 沒在跑 | `launchctl load ~/Library/LaunchAgents/com.hermes.claude-proxy.plist` |
+| 每次請求冷啟動 2-3 秒 | stateless 模式每次重啟 subprocess（符合預期） | 依賴 prompt caching 降低成本，非 bug |
+| `extra usage` / 429 usage limit | Claude 帳號額度用盡 | 到 https://claude.ai/settings/usage 儲值或等週期重置 |
+| WebSearch/工具被擋 | 工具權限未開 | 確認 server.js 的 `allowedTools` 清單，重啟 proxy |
+| SDK 呼叫失敗 | Claude CLI 未登入 | 執行 `claude auth login` 重新登入 |
+| 需要跨輪對話記憶 | stateless 預期不保留歷史 | client 端（bot）自行維護 `messages[]`；若真的需要 server 記憶可 `STATELESS_MODE=0` 切回 session |
 
 ---
+
+## 從 v4.0 升級
+
+```bash
+cd ~/hermes-claude-proxy
+git pull
+npm install
+
+# v5 改動：
+# 1. .env 新增 STATELESS_MODE=1（預設啟用，推薦保留）
+# 2. launchd plist 在 EnvironmentVariables 新增 STATELESS_MODE=1
+# 3. 若本機同時跑多個 client（Hermes + OpenClaw），建議各自 fork 一份獨立 proxy
+#    並使用不同 port，徹底隔離
+
+# 重啟
+launchctl unload ~/Library/LaunchAgents/com.hermes.claude-proxy.plist
+launchctl load ~/Library/LaunchAgents/com.hermes.claude-proxy.plist
+
+# 驗證已切到 stateless
+curl -s http://localhost:3456/health | python3 -m json.tool
+# 期望看到 "mode": "stateless"
+```
 
 ## 從 v3.0 升級
 
 ```bash
-cd ~/openclaw-claude-proxy
+cd ~/hermes-claude-proxy
 git pull
 npm install
 
-# 更新 .env：移除 CLAUDE_CLI_PATH（不再需要）
+# 更新 .env：移除 CLAUDE_CLI_PATH（不再需要）、新增 STATELESS_MODE=1
 # 更新 Hermes config：api_mode 從 "anthropic_messages" 改為 "chat_completions"
 # 更新 OpenClaw config：api 從 "anthropic-messages" 改為 "openai-completions"
 
 # 重啟
-launchctl unload ~/Library/LaunchAgents/com.openclaw.claude-proxy.plist
-launchctl load ~/Library/LaunchAgents/com.openclaw.claude-proxy.plist
+launchctl unload ~/Library/LaunchAgents/com.hermes.claude-proxy.plist
+launchctl load ~/Library/LaunchAgents/com.hermes.claude-proxy.plist
 ```
 
 ---

@@ -1,6 +1,6 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════════════════════
-# Hermes / Claude Code Proxy v4.0 — One-Click Installer (macOS)
+# Hermes / Claude Code Proxy v5.0 — One-Click Installer (macOS)
 #
 # Prerequisites:
 #   - Node.js 18+ (brew install node)
@@ -8,8 +8,8 @@
 #   - Claude Max subscription active
 #
 # Usage:
-#   git clone https://github.com/photofanz/openclaw-claude-proxy-v4.git openclaw-claude-proxy
-#   cd openclaw-claude-proxy
+#   git clone https://github.com/photofanz/openclaw-claude-proxy-v4.git hermes-claude-proxy
+#   cd hermes-claude-proxy
 #   bash install.sh
 # ═══════════════════════════════════════════════════════════════
 
@@ -25,7 +25,7 @@ NC='\033[0m'
 
 echo -e "${CYAN}"
 echo '╔════════════════════════════════════════════════════╗'
-echo '║  Hermes / Claude Code Proxy v4.0 Installer        ║'
+echo '║  Hermes / Claude Code Proxy v5.0 Installer        ║'
 echo '╚════════════════════════════════════════════════════╝'
 echo -e "${NC}"
 
@@ -73,8 +73,9 @@ echo -e "  ${GREEN}✓${NC} npm packages installed"
 # ─── Step 3: Configure .env ───────────────────────────────────
 echo -e "${CYAN}[3/7] Configuring .env...${NC}"
 
-# v4 default: no auth for local loopback use.
+# v5 default: no auth for local loopback use; stateless mode enabled.
 # Set API_KEY=... in .env manually if you want request auth (e.g. remote exposure).
+# Set STATELESS_MODE=0 to fall back to legacy persistent session (not recommended for multi-client).
 if [ ! -f .env ]; then
     cat > .env <<ENVEOF
 PORT=3456
@@ -83,8 +84,9 @@ MAX_CONCURRENT=2
 REQUEST_TIMEOUT=300000
 MAX_RETRIES=1
 PLUGINS_DIR=./plugins
+STATELESS_MODE=1
 ENVEOF
-    echo -e "  ${GREEN}✓${NC} .env created (no auth by default; set API_KEY in .env for auth)"
+    echo -e "  ${GREEN}✓${NC} .env created (stateless mode, no auth by default)"
 else
     echo -e "  ${YELLOW}→${NC} .env already exists, skipping"
 fi
@@ -115,8 +117,8 @@ fi
 # ─── Step 5: Create LaunchAgent ───────────────────────────────
 echo -e "${CYAN}[5/7] Creating LaunchAgent...${NC}"
 
-PLIST_FILE="$HOME/Library/LaunchAgents/com.openclaw.claude-proxy.plist"
-LOG_DIR="$HOME/.openclaw/logs"
+PLIST_FILE="$HOME/Library/LaunchAgents/com.hermes.claude-proxy.plist"
+LOG_DIR="$HOME/.hermes/logs"
 mkdir -p "$LOG_DIR"
 
 cat > "$PLIST_FILE" <<PLISTEOF
@@ -126,7 +128,7 @@ cat > "$PLIST_FILE" <<PLISTEOF
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.openclaw.claude-proxy</string>
+    <string>com.hermes.claude-proxy</string>
     <key>WorkingDirectory</key>
     <string>${SCRIPT_DIR}</string>
     <key>ProgramArguments</key>
@@ -143,6 +145,8 @@ cat > "$PLIST_FILE" <<PLISTEOF
         <key>MAX_CONCURRENT</key>
         <string>2</string>
         <key>MAX_RETRIES</key>
+        <string>1</string>
+        <key>STATELESS_MODE</key>
         <string>1</string>
         <key>PATH</key>
         <string>${HOME}/.local/bin:${HOME}/.npm-global/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
@@ -186,7 +190,7 @@ fi
 echo -e "${CYAN}[7/7] Done!${NC}"
 echo ""
 echo -e "${GREEN}╔════════════════════════════════════════════════════╗${NC}"
-echo -e "${GREEN}║  Proxy v4.0 is running!                           ║${NC}"
+echo -e "${GREEN}║  Proxy v5.0 is running!                           ║${NC}"
 echo -e "${GREEN}╠════════════════════════════════════════════════════╣${NC}"
 echo -e "${GREEN}║                                                   ║${NC}"
 echo -e "${GREEN}║  Endpoints (OpenAI-compatible, unified):          ║${NC}"
